@@ -333,9 +333,36 @@ pub async fn self_update(
         None => return (StatusCode::NOT_FOUND, "Could not find orqy install directory. Make sure update.sh exists.").into_response(),
     };
 
-    // Run the update script detached so it survives container restart
-    let result = Command::new("sh")
-        .args(["-c", &format!("nohup sh '{}' > /tmp/orqy-update.log 2>&1 &", script)])
+    // Get the host path for the orqy directory
+    let host_script = crate::hostpath::container_to_host(&script);
+    let host_dir = std::path::Path::new(&host_script).parent()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|| "/".to_string());
+
+    // Run update on the host:
+    // 1. Use bitnami/git to pull latest code (has git installed)
+    // 2. Use docker CLI to rebuild and restart (via socket)
+    let update_cmd = format!(
+        "sleep 2 && \
+         cd '{}' && \
+         git pull origin main && \
+         docker compose build --no-cache orqy && \
+         docker compose up -d --force-recreate orqy",
+        host_dir
+    );
+
+    // Run in a detached container with docker socket + host filesystem
+    let result = Command::new("docker")
+        .args([
+            "run", "-d", "--rm",
+            "--name", "orqy-updater",
+            "-v", "/var/run/docker.sock:/var/run/docker.sock",
+            "-v", "/:/host",
+            "-w", &format!("/host{}", host_dir),
+            "docker:cli",
+            "sh", "-c",
+            &format!("apk add --no-cache git > /dev/null 2>&1 && cd /host{} && git pull origin main && docker compose build --no-cache orqy && docker compose up -d --force-recreate orqy", host_dir),
+        ])
         .output()
         .await;
 
