@@ -196,6 +196,27 @@ pub async fn run_deploy(
         ).await;
     }
 
+    // Force-remove any existing containers from this compose project
+    let ps_args = build_compose_args(&project.compose_file, &project.service_name, "ps", &local_path, &project.compose_args);
+    let ps_str_args: Vec<&str> = ps_args.iter().map(|s| s.as_str()).collect();
+    if let Ok(output) = Command::new("docker")
+        .args(&ps_str_args)
+        .current_dir(&local_path)
+        .output()
+        .await
+    {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            let id = line.trim();
+            if !id.is_empty() {
+                let _ = Command::new("docker")
+                    .args(["rm", "-f", id])
+                    .output()
+                    .await;
+            }
+        }
+    }
+
     // Step 3: Docker compose up --build
     let log = repo::append_log(pool, deploy_id, line_num, "system", "=== Step 3: Building and starting containers ===").await?;
     let _ = tx.send(log);
@@ -248,6 +269,11 @@ fn build_compose_args(compose_file: &str, service_name: &Option<String>, action:
         "rm" => {
             args.push("rm".to_string());
             args.push("-f".to_string());
+        }
+        "ps" => {
+            args.push("ps".to_string());
+            args.push("-a".to_string());
+            args.push("-q".to_string());
         }
         "up" => {
             args.push("up".to_string());
