@@ -7,7 +7,8 @@ cd "$(dirname "$0")"
 echo "Pulling latest orqy..."
 git pull origin main
 
-echo "Rebuilding and restarting..."
-docker compose up -d --build --force-recreate orqy
+echo "Rebuilding and restarting (no cache)..."
+docker compose build --no-cache orqy
+docker compose up -d --force-recreate orqy
 
 echo "Orqy updated successfully"
