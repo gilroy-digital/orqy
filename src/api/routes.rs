@@ -334,34 +334,19 @@ pub async fn self_update(
     };
 
     // Get the host path for the orqy directory
-    let host_script = crate::hostpath::container_to_host(&script);
-    let host_dir = std::path::Path::new(&host_script).parent()
+    let host_dir = crate::hostpath::container_to_host(&script);
+    let host_dir = std::path::Path::new(&host_dir).parent()
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|| "/".to_string());
 
-    // Run update on the host:
-    // 1. Use bitnami/git to pull latest code (has git installed)
-    // 2. Use docker CLI to rebuild and restart (via socket)
-    let update_cmd = format!(
-        "sleep 2 && \
-         cd '{}' && \
-         git pull origin main && \
-         docker compose build --no-cache orqy && \
-         docker compose up -d --force-recreate orqy",
-        host_dir
-    );
-
-    // Run in a detached container with docker socket + host filesystem
-    let result = Command::new("docker")
+    // Use nsenter to run the update script directly on the host
+    // PID 1 is always the host's init process
+    let result = Command::new("nsenter")
         .args([
-            "run", "-d", "--rm",
-            "--name", "orqy-updater",
-            "-v", "/var/run/docker.sock:/var/run/docker.sock",
-            "-v", "/:/host",
-            "-w", &format!("/host{}", host_dir),
-            "docker:cli",
-            "sh", "-c",
-            &format!("apk add --no-cache git > /dev/null 2>&1 && cd /host{} && git pull origin main && docker compose build --no-cache orqy && docker compose up -d --force-recreate orqy", host_dir),
+            "--target", "1",
+            "--mount", "--uts", "--ipc", "--net", "--pid",
+            "--", "sh", "-c",
+            &format!("cd '{}' && nohup sh update.sh > /tmp/orqy-update.log 2>&1 &", host_dir),
         ])
         .output()
         .await;
