@@ -22,6 +22,32 @@ pub async fn run_deploy(
     encryption_key: &[u8; 32],
     global_pat: Option<&str>,
 ) -> anyhow::Result<()> {
+    let timeout_duration = std::time::Duration::from_secs(project.build_timeout_secs as u64);
+
+    match tokio::time::timeout(timeout_duration, run_deploy_inner(pool, broadcaster, project, deploy_id, encryption_key, global_pat)).await {
+        Ok(result) => result,
+        Err(_) => {
+            // Timeout — cancel the deploy
+            tracing::warn!("Deploy timed out after {}s for '{}'", project.build_timeout_secs, project.name);
+            broadcaster.cancel(deploy_id).await;
+            let tx = broadcaster.get_sender(deploy_id).await;
+            let _ = repo::append_log(pool, deploy_id, 9999, "system",
+                &format!("=== Deploy timed out after {}s ===", project.build_timeout_secs)).await;
+            repo::update_deploy_status(pool, deploy_id, "failed", None, Some("Timed out")).await?;
+            broadcaster.remove(deploy_id).await;
+            Ok(())
+        }
+    }
+}
+
+async fn run_deploy_inner(
+    pool: &PgPool,
+    broadcaster: &DeployBroadcaster,
+    project: &Project,
+    deploy_id: Uuid,
+    encryption_key: &[u8; 32],
+    global_pat: Option<&str>,
+) -> anyhow::Result<()> {
     let tx = broadcaster.get_sender(deploy_id).await;
     let mut line_num = 0i32;
 

@@ -42,6 +42,7 @@ export default function EditProject() {
         auto_deploy: project.auto_deploy,
         compose_args: project.compose_args || '',
         notify_url: project.notify_url || '',
+        build_timeout_secs: project.build_timeout_secs || 600,
       });
       fetchBranches(project.repo_url, '');
       fetchContainers(project.local_path, project.compose_file);
@@ -123,6 +124,7 @@ export default function EditProject() {
       payload.service_name = payload.service_name || null;
       payload.compose_args = payload.compose_args || null;
       payload.notify_url = payload.notify_url || null;
+      payload.build_timeout_secs = parseInt(payload.build_timeout_secs);
       payload.poll_interval_secs = parseInt(payload.poll_interval_secs);
 
       await apiPut(`/projects/${id}`, payload);
@@ -254,11 +256,16 @@ export default function EditProject() {
               <input className={inputClass} type="number" min="10" value={form.poll_interval_secs} onChange={update('poll_interval_secs')} />
             </div>
             <div>
-              <label className={labelClass}>Webhook Secret</label>
-              <input className={inputClass} type="text" autoComplete="off" value={form.webhook_secret} onChange={update('webhook_secret')}
-                placeholder={project.has_webhook_secret ? 'Enter new secret to replace' : 'Optional'} />
-              {project.has_webhook_secret && <p className="text-xs text-emerald-400 mt-1">A webhook secret is currently set.</p>}
+              <label className={labelClass}>Build Timeout (seconds)</label>
+              <input className={inputClass} type="number" min="60" value={form.build_timeout_secs} onChange={update('build_timeout_secs')} />
+              <p className="text-xs text-gray-500 mt-1">Auto-cancels after this duration</p>
             </div>
+          </div>
+          <div className="mt-3">
+            <label className={labelClass}>Webhook Secret</label>
+            <input className={inputClass} type="text" autoComplete="off" value={form.webhook_secret} onChange={update('webhook_secret')}
+              placeholder={project.has_webhook_secret ? 'Enter new secret to replace' : 'Optional'} />
+            {project.has_webhook_secret && <p className="text-xs text-emerald-400 mt-1">A webhook secret is currently set.</p>}
           </div>
           <div className="flex gap-6 mt-4">
             <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">

@@ -23,8 +23,8 @@ pub async fn create_project(pool: &PgPool, input: &CreateProject, pat_encrypted:
     let project = sqlx::query_as::<_, Project>(
         r#"
         INSERT INTO projects (name, repo_url, branch, local_path, compose_file, service_name,
-                              pat_encrypted, poll_interval_secs, polling_enabled, webhook_secret, auto_deploy, compose_args, notify_url)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                              pat_encrypted, poll_interval_secs, polling_enabled, webhook_secret, auto_deploy, compose_args, notify_url, build_timeout_secs)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
         RETURNING *
         "#,
     )
@@ -41,6 +41,7 @@ pub async fn create_project(pool: &PgPool, input: &CreateProject, pat_encrypted:
     .bind(input.auto_deploy.unwrap_or(true))
     .bind(&input.compose_args)
     .bind(&input.notify_url)
+    .bind(input.build_timeout_secs.unwrap_or(600))
     .fetch_one(pool)
     .await?;
     Ok(project)
@@ -64,7 +65,7 @@ pub async fn update_project(
             name = $2, repo_url = $3, branch = $4, local_path = $5,
             compose_file = $6, service_name = $7, pat_encrypted = $8,
             poll_interval_secs = $9, polling_enabled = $10, webhook_secret = $11,
-            auto_deploy = $12, compose_args = $13, notify_url = $14, updated_at = NOW()
+            auto_deploy = $12, compose_args = $13, notify_url = $14, build_timeout_secs = $15, updated_at = NOW()
         WHERE id = $1
         RETURNING *
         "#,
@@ -83,6 +84,7 @@ pub async fn update_project(
     .bind(input.auto_deploy.unwrap_or(existing.auto_deploy))
     .bind(input.compose_args.as_ref().or(existing.compose_args.as_ref()))
     .bind(input.notify_url.as_ref().or(existing.notify_url.as_ref()))
+    .bind(input.build_timeout_secs.unwrap_or(existing.build_timeout_secs))
     .fetch_one(pool)
     .await?;
     Ok(Some(project))

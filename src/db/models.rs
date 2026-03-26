@@ -18,6 +18,7 @@ pub struct Project {
     pub auto_deploy: bool,
     pub compose_args: Option<String>,
     pub notify_url: Option<String>,
+    pub build_timeout_secs: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -37,6 +38,7 @@ pub struct CreateProject {
     pub auto_deploy: Option<bool>,
     pub compose_args: Option<String>,
     pub notify_url: Option<String>,
+    pub build_timeout_secs: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -54,6 +56,7 @@ pub struct UpdateProject {
     pub auto_deploy: Option<bool>,
     pub compose_args: Option<String>,
     pub notify_url: Option<String>,
+    pub build_timeout_secs: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
@@ -102,5 +105,6 @@ pub struct ProjectSummary {
     pub has_webhook_secret: bool,
     pub compose_args: Option<String>,
     pub notify_url: Option<String>,
+    pub build_timeout_secs: i32,
     pub last_deploy: Option<Deploy>,
 }
