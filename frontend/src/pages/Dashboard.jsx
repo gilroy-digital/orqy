@@ -1,11 +1,19 @@
 import { Link } from 'react-router-dom';
-import { useApi, apiDelete } from '../hooks/useApi';
+import { useApi, apiPost, apiDelete } from '../hooks/useApi';
 import StatusBadge from '../components/StatusBadge';
-import { GitBranch, Clock, Rocket, RefreshCw, Trash2 } from 'lucide-react';
+import { GitBranch, Clock, Rocket, RefreshCw, Trash2, Square, Play, RotateCw } from 'lucide-react';
 
 export default function Dashboard() {
   const { data: projects, loading, error, refetch } = useApi('/projects', [], { pollInterval: 5000 });
   const { data: containerStatus } = useApi('/container-status', [], { pollInterval: 15000 });
+
+  const handleContainerAction = async (projectId, action) => {
+    try {
+      await apiPost(`/projects/${projectId}/containers`, { action });
+    } catch (err) {
+      alert(`${action} failed: ${err.message}`);
+    }
+  };
 
   const handleDelete = async (e, projectId, projectName) => {
     e.preventDefault();
@@ -102,16 +110,41 @@ export default function Dashboard() {
               )}
             </div>
 
-            <div className="flex items-center gap-3 mt-4 pt-3 border-t border-gray-800 text-xs">
-              {containerStatus && containerStatus[project.id] && (
-                <span className={containerStatus[project.id].healthy ? 'text-emerald-400' : 'text-red-400'}>
-                  {containerStatus[project.id].healthy ? 'Running' : 'Down'}
-                </span>
-              )}
-              <span className={project.polling_enabled ? 'text-emerald-400' : 'text-gray-600'}>
-                {project.polling_enabled ? 'Polling' : 'No polling'}
-              </span>
-              {project.has_pat && <span className="text-amber-400">PAT</span>}
+            <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-800 text-xs">
+              <div className="flex items-center gap-3">
+                {containerStatus && containerStatus[project.id] ? (
+                  <>
+                    <span className={containerStatus[project.id].healthy ? 'text-emerald-400' : 'text-red-400'}>
+                      {containerStatus[project.id].healthy ? 'Running' : 'Down'}
+                    </span>
+                    {containerStatus[project.id].uptime && (
+                      <span className="text-gray-500">{containerStatus[project.id].uptime}</span>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-gray-600">--</span>
+                )}
+                {project.polling_enabled && <span className="text-emerald-400">Polling</span>}
+              </div>
+              <div className="flex items-center gap-1" onClick={(e) => e.preventDefault()}>
+                {containerStatus?.[project.id]?.healthy ? (
+                  <>
+                    <button onClick={(e) => { e.preventDefault(); handleContainerAction(project.id, 'restart'); }}
+                      className="p-1 text-gray-600 hover:text-amber-400 rounded transition-colors" title="Restart">
+                      <RotateCw className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={(e) => { e.preventDefault(); handleContainerAction(project.id, 'stop'); }}
+                      className="p-1 text-gray-600 hover:text-red-400 rounded transition-colors" title="Stop">
+                      <Square className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                ) : (
+                  <button onClick={(e) => { e.preventDefault(); handleContainerAction(project.id, 'start'); }}
+                    className="p-1 text-gray-600 hover:text-emerald-400 rounded transition-colors" title="Start">
+                    <Play className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
           </Link>
         ))}

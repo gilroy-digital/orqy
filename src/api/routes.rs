@@ -162,8 +162,18 @@ pub async fn container_status(
 
         let all_up = !containers.is_empty() && containers.iter().all(|c| c["running"].as_bool().unwrap_or(false));
 
+        // Extract uptime from the first running container's status (e.g., "Up 2 hours")
+        let uptime = containers.iter()
+            .find(|c| c["running"].as_bool().unwrap_or(false))
+            .and_then(|c| c["status"].as_str())
+            .and_then(|s| {
+                // Status looks like "Up 2 hours" or "Up About a minute"
+                s.strip_prefix("Up ").map(|u| u.to_string())
+            });
+
         statuses.insert(project.id.to_string(), serde_json::json!({
             "healthy": all_up,
+            "uptime": uptime,
             "containers": containers,
         }));
     }
@@ -172,6 +182,56 @@ pub async fn container_status(
 }
 
 use std::collections::HashMap;
+
+// ── Container control ──
+
+#[derive(Deserialize)]
+pub struct ContainerAction {
+    pub action: String, // "stop", "start", "restart"
+}
+
+pub async fn control_containers(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(input): Json<ContainerAction>,
+) -> impl IntoResponse {
+    let project = match repo::get_project(&state.pool, id).await {
+        Ok(Some(p)) => p,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    };
+
+    let local_path = host_to_container(&project.local_path);
+    let action = match input.action.as_str() {
+        "stop" => "stop",
+        "start" => "start",
+        "restart" => "restart",
+        _ => return (StatusCode::BAD_REQUEST, "Invalid action").into_response(),
+    };
+
+    let mut args = vec!["compose".to_string(), "-f".to_string(), project.compose_file.clone(), action.to_string()];
+    if let Some(ref svc) = project.service_name {
+        args.push(svc.clone());
+    }
+    let str_args: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+
+    let output = Command::new("docker")
+        .args(&str_args)
+        .current_dir(&local_path)
+        .output()
+        .await;
+
+    match output {
+        Ok(o) if o.status.success() => {
+            Json(serde_json::json!({ "status": "ok", "action": action })).into_response()
+        }
+        Ok(o) => {
+            let stderr = String::from_utf8_lossy(&o.stderr);
+            (StatusCode::INTERNAL_SERVER_ERROR, stderr.to_string()).into_response()
+        }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
 
 // ── Projects ──
 
