@@ -41,6 +41,7 @@ export default function EditProject() {
         webhook_secret: '',
         auto_deploy: project.auto_deploy,
         compose_args: project.compose_args || '',
+        notify_url: project.notify_url || '',
       });
       fetchBranches(project.repo_url, '');
       fetchContainers(project.local_path, project.compose_file);
@@ -121,6 +122,7 @@ export default function EditProject() {
       if (!payload.webhook_secret) delete payload.webhook_secret;
       payload.service_name = payload.service_name || null;
       payload.compose_args = payload.compose_args || null;
+      payload.notify_url = payload.notify_url || null;
       payload.poll_interval_secs = parseInt(payload.poll_interval_secs);
 
       await apiPut(`/projects/${id}`, payload);
@@ -226,6 +228,12 @@ export default function EditProject() {
           <label className={labelClass}>Extra Compose Arguments</label>
           <input className={inputClass} value={form.compose_args} onChange={update('compose_args')} placeholder="e.g. --env-file .env.production --profile prod" />
           <p className="text-xs text-gray-500 mt-1">Additional flags passed to docker compose commands.</p>
+        </div>
+
+        <div>
+          <label className={labelClass}>Notification Webhook URL</label>
+          <input className={inputClass} value={form.notify_url} onChange={update('notify_url')} placeholder="https://hooks.slack.com/... or Discord webhook URL" />
+          <p className="text-xs text-gray-500 mt-1">Receives a POST with deploy status (success/failed) on completion.</p>
         </div>
 
         <div className="border-t border-gray-800 pt-5">

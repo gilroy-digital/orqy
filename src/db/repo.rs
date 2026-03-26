@@ -23,8 +23,8 @@ pub async fn create_project(pool: &PgPool, input: &CreateProject, pat_encrypted:
     let project = sqlx::query_as::<_, Project>(
         r#"
         INSERT INTO projects (name, repo_url, branch, local_path, compose_file, service_name,
-                              pat_encrypted, poll_interval_secs, polling_enabled, webhook_secret, auto_deploy, compose_args)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                              pat_encrypted, poll_interval_secs, polling_enabled, webhook_secret, auto_deploy, compose_args, notify_url)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         RETURNING *
         "#,
     )
@@ -40,6 +40,7 @@ pub async fn create_project(pool: &PgPool, input: &CreateProject, pat_encrypted:
     .bind(&input.webhook_secret)
     .bind(input.auto_deploy.unwrap_or(true))
     .bind(&input.compose_args)
+    .bind(&input.notify_url)
     .fetch_one(pool)
     .await?;
     Ok(project)
@@ -63,7 +64,7 @@ pub async fn update_project(
             name = $2, repo_url = $3, branch = $4, local_path = $5,
             compose_file = $6, service_name = $7, pat_encrypted = $8,
             poll_interval_secs = $9, polling_enabled = $10, webhook_secret = $11,
-            auto_deploy = $12, compose_args = $13, updated_at = NOW()
+            auto_deploy = $12, compose_args = $13, notify_url = $14, updated_at = NOW()
         WHERE id = $1
         RETURNING *
         "#,
@@ -81,6 +82,7 @@ pub async fn update_project(
     .bind(input.webhook_secret.as_ref().or(existing.webhook_secret.as_ref()))
     .bind(input.auto_deploy.unwrap_or(existing.auto_deploy))
     .bind(input.compose_args.as_ref().or(existing.compose_args.as_ref()))
+    .bind(input.notify_url.as_ref().or(existing.notify_url.as_ref()))
     .fetch_one(pool)
     .await?;
     Ok(Some(project))
@@ -149,6 +151,16 @@ pub async fn list_deploys(pool: &PgPool, project_id: Uuid, limit: i64) -> anyhow
     .fetch_all(pool)
     .await?;
     Ok(deploys)
+}
+
+pub async fn has_running_deploy(pool: &PgPool, project_id: Uuid) -> anyhow::Result<bool> {
+    let count: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM deploys WHERE project_id = $1 AND status IN ('pending', 'running')"
+    )
+    .bind(project_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(count.0 > 0)
 }
 
 pub async fn get_latest_deploy(pool: &PgPool, project_id: Uuid) -> anyhow::Result<Option<Deploy>> {

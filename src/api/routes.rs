@@ -125,6 +125,7 @@ pub async fn list_projects(State(state): State<AppState>) -> impl IntoResponse {
                     has_pat: p.pat_encrypted.is_some(),
                     has_webhook_secret: p.webhook_secret.is_some(),
                     compose_args: p.compose_args,
+                    notify_url: p.notify_url,
                     last_deploy,
                 });
             }
@@ -222,6 +223,13 @@ pub async fn trigger_deploy(
         Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     };
 
+    // Check if a deploy is already running
+    if repo::has_running_deploy(&state.pool, project.id).await.unwrap_or(false) {
+        return (StatusCode::CONFLICT, Json(serde_json::json!({
+            "error": "A deploy is already in progress for this project"
+        }))).into_response();
+    }
+
     let deploy = match repo::create_deploy(&state.pool, project.id, "manual").await {
         Ok(d) => d,
         Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
@@ -312,6 +320,70 @@ pub async fn set_os(
         Ok(_) => StatusCode::OK.into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
+}
+
+pub async fn self_update(
+) -> impl IntoResponse {
+    // Find the orqy install directory on the host by looking for update.sh
+    // The host root is mounted at /host
+    let update_script = find_update_script();
+    let script = match update_script {
+        Some(s) => s,
+        None => return (StatusCode::NOT_FOUND, "Could not find orqy install directory. Make sure update.sh exists.").into_response(),
+    };
+
+    // Run the update script detached so it survives container restart
+    let result = Command::new("sh")
+        .args(["-c", &format!("nohup sh '{}' > /tmp/orqy-update.log 2>&1 &", script)])
+        .output()
+        .await;
+
+    match result {
+        Ok(_) => {
+            tracing::info!("Self-update initiated from {}", script);
+            Json(serde_json::json!({
+                "status": "updating",
+                "message": "Orqy is updating. The page will reload when ready."
+            })).into_response()
+        }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to start update: {}", e)).into_response(),
+    }
+}
+
+fn find_update_script() -> Option<String> {
+    // Check common locations for the orqy install
+    let host_prefix = if std::path::Path::new("/host").exists() { "/host" } else { "" };
+
+    // Search for update.sh in likely locations
+    let candidates = [
+        format!("{}/app/update.sh", host_prefix),  // If orqy dir is mounted directly
+    ];
+
+    for path in &candidates {
+        if std::path::Path::new(path).exists() {
+            return Some(path.clone());
+        }
+    }
+
+    // Try to find it by searching common paths
+    let search_dirs = ["data/apps", "opt", "home", "Users"];
+    for dir in &search_dirs {
+        let base = format!("{}/{}", host_prefix, dir);
+        if let Ok(output) = std::process::Command::new("find")
+            .args([&base, "-maxdepth", "4", "-name", "update.sh", "-path", "*/orqy/*"])
+            .output()
+        {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if let Some(path) = stdout.lines().next() {
+                let path = path.trim();
+                if !path.is_empty() {
+                    return Some(path.to_string());
+                }
+            }
+        }
+    }
+
+    None
 }
 
 pub async fn factory_reset(

@@ -13,6 +13,9 @@ use sqlx::PgPool;
 /// Tracks the last known commit SHA per project to detect changes.
 type CommitCache = Arc<RwLock<HashMap<Uuid, String>>>;
 
+/// Tracks which projects currently have a deploy running.
+type ActiveDeploys = Arc<RwLock<std::collections::HashSet<Uuid>>>;
+
 /// Start the background polling engine.
 /// Spawns a loop that periodically checks all polling-enabled projects.
 pub fn start_polling(
@@ -21,6 +24,7 @@ pub fn start_polling(
     encryption_key: [u8; 32],
 ) -> tokio::task::JoinHandle<()> {
     let commit_cache: CommitCache = Arc::new(RwLock::new(HashMap::new()));
+    let active_deploys: ActiveDeploys = Arc::new(RwLock::new(std::collections::HashSet::new()));
 
     tokio::spawn(async move {
         // Main tick — check every 15 seconds which projects are due for a poll
@@ -59,6 +63,12 @@ pub fn start_polling(
 
                 last_poll.insert(project.id, now);
 
+                // Skip if a deploy is already running for this project
+                if active_deploys.read().await.contains(&project.id) {
+                    tracing::debug!("Skipping poll for '{}' — deploy already in progress", project.name);
+                    continue;
+                }
+
                 // Check for new commits
                 match check_for_changes(&project, &commit_cache, &encryption_key, global_pat.as_deref()).await {
                     Ok(true) => {
@@ -67,8 +77,12 @@ pub fn start_polling(
                         let broadcaster = broadcaster.clone();
                         let key = encryption_key;
                         let gp = global_pat.clone();
+                        let active = active_deploys.clone();
+
+                        active.write().await.insert(project.id);
 
                         tokio::spawn(async move {
+                            let project_id = project.id;
                             match repo::create_deploy(&pool, project.id, "poll").await {
                                 Ok(deploy) => {
                                     if let Err(e) = executor::run_deploy(
@@ -80,6 +94,7 @@ pub fn start_polling(
                                 }
                                 Err(e) => tracing::error!("Failed to create deploy record: {}", e),
                             }
+                            active.write().await.remove(&project_id);
                         });
                     }
                     Ok(false) => {

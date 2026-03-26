@@ -239,8 +239,50 @@ pub async fn run_deploy(
     ).await?;
     let _ = tx.send(log);
 
+    // Send outbound webhook notification
+    if let Some(ref url) = project.notify_url {
+        send_deploy_notification(url, project, deploy_id, final_status, sha, msg).await;
+    }
+
     broadcaster.remove(deploy_id).await;
     Ok(())
+}
+
+async fn send_deploy_notification(
+    url: &str,
+    project: &Project,
+    deploy_id: Uuid,
+    status: &str,
+    commit_sha: Option<&str>,
+    commit_message: Option<&str>,
+) {
+    let payload = serde_json::json!({
+        "project": project.name,
+        "project_id": project.id,
+        "deploy_id": deploy_id,
+        "status": status,
+        "branch": project.branch,
+        "repo_url": project.repo_url,
+        "commit_sha": commit_sha,
+        "commit_message": commit_message,
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+    });
+
+    match reqwest::Client::new()
+        .post(url)
+        .header("Content-Type", "application/json")
+        .json(&payload)
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await
+    {
+        Ok(res) => {
+            tracing::info!("Deploy notification sent to {} — status {}", url, res.status());
+        }
+        Err(e) => {
+            tracing::warn!("Failed to send deploy notification to {}: {}", url, e);
+        }
+    }
 }
 
 fn build_compose_args(compose_file: &str, service_name: &Option<String>, action: &str, local_path: &str, compose_args: &Option<String>) -> Vec<String> {

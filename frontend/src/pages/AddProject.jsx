@@ -30,6 +30,7 @@ export default function AddProject() {
     webhook_secret: '',
     auto_deploy: true,
     compose_args: '',
+    notify_url: '',
   });
 
   // Repo validation state
@@ -203,6 +204,7 @@ export default function AddProject() {
         pat: form.pat || null,
         webhook_secret: form.webhook_secret || null,
         compose_args: form.compose_args || null,
+        notify_url: form.notify_url || null,
         poll_interval_secs: parseInt(form.poll_interval_secs),
       };
       const project = await apiPost('/projects', payload);
@@ -423,6 +425,12 @@ export default function AddProject() {
                 <input type="checkbox" checked={form.auto_deploy} onChange={update('auto_deploy')} className="rounded bg-gray-800 border-gray-700 text-indigo-500 focus:ring-indigo-500" />
                 Auto-deploy on change
               </label>
+            </div>
+
+            <div className="mt-3">
+              <label className={labelClass}>Notification Webhook URL</label>
+              <input className={inputClass} value={form.notify_url} onChange={update('notify_url')} placeholder="https://hooks.slack.com/... or Discord webhook URL" />
+              <p className="text-xs text-gray-500 mt-1">Receives a POST with deploy status (success/failed) on completion.</p>
             </div>
           </div>
         )}

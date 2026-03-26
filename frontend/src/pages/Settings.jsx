@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useApi, apiPost, apiDelete } from '../hooks/useApi';
 import { useAuth } from '../hooks/useAuth';
-import { Shield, Check, Trash2, Monitor, AlertTriangle } from 'lucide-react';
+import { Shield, Check, Trash2, Monitor, AlertTriangle, RefreshCw } from 'lucide-react';
 
 const OS_LABELS = { mac: 'macOS', windows: 'Windows', linux: 'Linux', unknown: 'Unknown' };
 
@@ -128,6 +128,41 @@ export default function Settings() {
           </div>
         </div>
       )}
+
+      {/* Update Orqy */}
+      <div className="mt-6 bg-gray-900 border border-gray-800 rounded-xl p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <RefreshCw className="w-5 h-5 text-indigo-400" />
+          <h2 className="text-lg font-semibold text-white">Update Orqy</h2>
+        </div>
+        <p className="text-sm text-gray-400 mb-4">
+          Pulls the latest version from the git repository and rebuilds the container. The page will reload automatically.
+        </p>
+        <button
+          type="button"
+          onClick={async () => {
+            if (!confirm('Update Orqy to the latest version? The service will restart briefly.')) return;
+            try {
+              await apiPost('/settings/update', {});
+              // Poll until the service comes back
+              const poll = setInterval(async () => {
+                try {
+                  const res = await fetch('/api/setup/status');
+                  if (res.ok) {
+                    clearInterval(poll);
+                    window.location.reload();
+                  }
+                } catch {}
+              }, 3000);
+            } catch (err) {
+              alert('Update failed: ' + err.message);
+            }
+          }}
+          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-colors text-sm font-medium"
+        >
+          Check for Updates
+        </button>
+      </div>
 
       {/* Factory Reset */}
       <div className="mt-6 bg-gray-900 border border-red-900/30 rounded-xl p-6">

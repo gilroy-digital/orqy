@@ -56,6 +56,11 @@ pub async fn handle_webhook(
         return (StatusCode::OK, "Ignored: auto-deploy disabled").into_response();
     }
 
+    // Skip if a deploy is already running
+    if repo::has_running_deploy(&state.pool, project.id).await.unwrap_or(false) {
+        return (StatusCode::OK, "Ignored: deploy already in progress").into_response();
+    }
+
     // Create deploy and run it
     let deploy = match repo::create_deploy(&state.pool, project.id, "webhook").await {
         Ok(d) => d,

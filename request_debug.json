@@ -1,0 +1,41 @@
+{
+  "body": {
+    "items": [
+      {
+        "category": "feature",
+        "description": "Added support for notification webhook URL in project settings."
+      },
+      {
+        "category": "feature",
+        "description": "Implemented self-update functionality for Orqy with a new update endpoint."
+      },
+      {
+        "category": "improvement",
+        "description": "Enhanced deploy process to send outbound webhook notifications on completion."
+      },
+      {
+        "category": "improvement",
+        "description": "Added check to prevent multiple concurrent deploys for the same project."
+      },
+      {
+        "category": "improvement",
+        "description": "Updated frontend to include notification webhook URL input in AddProject and EditProject pages."
+      },
+      {
+        "category": "improvement",
+        "description": "Included RefreshCw icon in Settings page for update functionality."
+      },
+      {
+        "category": "feature",
+        "description": "Integrated reqwest crate for HTTP client capabilities."
+      }
+    ],
+    "published": false
+  },
+  "headers": {
+    "Authorization": "Token your-token-here",
+    "Content-Type": "application/json"
+  },
+  "method": "POST",
+  "url": "//"
+}
