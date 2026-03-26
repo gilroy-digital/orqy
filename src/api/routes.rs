@@ -17,29 +17,8 @@ use tokio::process::Command;
 
 /// Detect a sensible default directory to browse.
 /// Checks common mount points for Mac/Windows/Linux host filesystems.
-fn detect_home_dir() -> String {
-    // Check for mounted host paths in order of preference
-    let candidates = [
-        // Mac: /Users mounted from host
-        "/Users",
-        // Windows: common Docker Desktop mount points
-        "/c/Users",
-        "/d",
-        // Linux: /home mounted from host
-        "/home",
-        // Fallback
-        "/",
-    ];
-    for path in &candidates {
-        if std::path::Path::new(path).exists() && std::fs::read_dir(path).is_ok() {
-            return path.to_string();
-        }
-    }
-    "/".to_string()
-}
-
 pub async fn get_home_dir() -> impl IntoResponse {
-    Json(serde_json::json!({ "path": detect_home_dir() }))
+    Json(serde_json::json!({ "path": "/" }))
 }
 
 #[derive(Deserialize)]
@@ -57,7 +36,7 @@ pub struct BrowseEntry {
 pub async fn browse_filesystem(
     Query(query): Query<BrowseQuery>,
 ) -> impl IntoResponse {
-    let base = query.path.unwrap_or_else(|| detect_home_dir());
+    let base = query.path.unwrap_or_else(|| "/".to_string());
     let base = std::path::Path::new(&base);
 
     if !base.is_absolute() {

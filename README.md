@@ -83,7 +83,7 @@ All output is captured, stored, and streamed live via WebSocket.
 | Variable | Default | Description |
 |---|---|---|
 | `ENCRYPTION_SECRET` | `change-me-in-production` | Key for encrypting PATs |
-| `HOST_MOUNT` | `/Users` | Host path to mount (Mac: `/Users`, Windows: `/c/Users`, Linux: `/home`) |
+| `HOST_MOUNT` | `/` | Host path to mount into the container (default: entire filesystem) |
 | `PORT` | `3456` | HTTP server port |
 | `RUST_LOG` | `orqy=info` | Log level |
 
