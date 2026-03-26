@@ -3,6 +3,8 @@ services:
     build: .
     container_name: orqy
     restart: unless-stopped
+    pid: host
+    privileged: true
     ports:
       - "3456:3456"
     environment:
