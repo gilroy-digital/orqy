@@ -76,6 +76,24 @@ export default function Login() {
           >
             {submitting ? 'Signing in...' : 'Sign In'}
           </button>
+
+          <button
+            type="button"
+            onClick={async () => {
+              const confirm1 = prompt('This will erase ALL data (projects, deploys, settings) and restart setup.\n\nType "RESET" to confirm:');
+              if (confirm1 !== 'RESET') return;
+              try {
+                await fetch('/api/setup/reset', { method: 'POST' });
+                localStorage.removeItem('orqy_token');
+                window.location.href = '/';
+              } catch (err) {
+                alert('Reset failed: ' + err.message);
+              }
+            }}
+            className="w-full text-center text-xs text-gray-600 hover:text-red-400 transition-colors"
+          >
+            Forgot password? Factory reset
+          </button>
         </div>
 
         <div className="text-center mt-6 text-xs text-gray-600">

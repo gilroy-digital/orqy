@@ -297,6 +297,21 @@ pub async fn get_settings(State(state): State<AppState>) -> impl IntoResponse {
     })).into_response()
 }
 
+#[derive(Deserialize)]
+pub struct SetOsRequest {
+    pub os: String,
+}
+
+pub async fn set_os(
+    State(state): State<AppState>,
+    Json(input): Json<SetOsRequest>,
+) -> impl IntoResponse {
+    match repo::set_setting(&state.pool, "host_os", &input.os).await {
+        Ok(_) => StatusCode::OK.into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
 pub async fn factory_reset(
     State(state): State<AppState>,
 ) -> impl IntoResponse {

@@ -93,7 +93,7 @@ export default function Setup() {
           </div>
 
           <div>
-            <label className={labelClass}>Host Operating System</label>
+            <label className={labelClass}>Server Operating System</label>
             <div className="grid grid-cols-3 gap-2">
               {OS_OPTIONS.map((opt) => (
                 <button

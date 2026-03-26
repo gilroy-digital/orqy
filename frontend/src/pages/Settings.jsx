@@ -101,18 +101,29 @@ export default function Settings() {
             <Monitor className="w-5 h-5 text-indigo-400" />
             <h2 className="text-lg font-semibold text-white">System</h2>
           </div>
-          <div className="grid grid-cols-3 gap-4 text-sm">
+          <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <span className="text-gray-500">Host OS</span>
-              <p className="text-white mt-0.5">{OS_LABELS[systemInfo.detected_os] || systemInfo.detected_os}</p>
+              <span className="text-gray-500">Server OS</span>
+              <div className="flex items-center gap-2 mt-1">
+                <select
+                  value={systemInfo.detected_os}
+                  onChange={async (e) => {
+                    try {
+                      await apiPost('/settings/os', { os: e.target.value });
+                      window.location.reload();
+                    } catch {}
+                  }}
+                  className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-white text-sm"
+                >
+                  <option value="linux">Linux</option>
+                  <option value="mac">macOS</option>
+                  <option value="windows">Windows</option>
+                </select>
+              </div>
             </div>
             <div>
               <span className="text-gray-500">Architecture</span>
               <p className="text-white mt-0.5">{systemInfo.arch}</p>
-            </div>
-            <div>
-              <span className="text-gray-500">Container</span>
-              <p className="text-white mt-0.5">{systemInfo.container_os}</p>
             </div>
           </div>
         </div>

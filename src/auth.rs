@@ -155,6 +155,27 @@ pub async fn logout(
     StatusCode::NO_CONTENT
 }
 
+// ── Public factory reset (from login page) ──
+
+pub async fn public_reset(
+    State(state): State<crate::api::AppState>,
+) -> impl IntoResponse {
+    let queries = [
+        "DELETE FROM deploy_logs",
+        "DELETE FROM deploys",
+        "DELETE FROM projects",
+        "DELETE FROM settings",
+        "DELETE FROM users",
+    ];
+    for q in queries {
+        if let Err(e) = sqlx::query(q).execute(&state.pool).await {
+            return (StatusCode::INTERNAL_SERVER_ERROR, format!("Reset failed: {}", e)).into_response();
+        }
+    }
+    tracing::warn!("Factory reset via login page — all data cleared");
+    StatusCode::NO_CONTENT.into_response()
+}
+
 // ── Auth middleware ──
 
 pub async fn auth_middleware(

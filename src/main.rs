@@ -69,6 +69,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/setup", post(auth::do_setup))
         .route("/auth/login", post(auth::login))
         .route("/auth/logout", post(auth::logout))
+        .route("/setup/reset", post(auth::public_reset))
         // Webhooks must be public
         .route("/webhook/:project_id", post(webhook::handle_webhook));
 
@@ -87,6 +88,7 @@ async fn main() -> anyhow::Result<()> {
         // Settings
         .route("/settings", get(api::routes::get_settings))
         .route("/settings/pat", post(api::routes::set_global_pat).delete(api::routes::delete_global_pat))
+        .route("/settings/os", post(api::routes::set_os))
         .route("/settings/reset", post(api::routes::factory_reset))
         // Filesystem browsing
         .route("/browse", get(api::routes::browse_filesystem))
