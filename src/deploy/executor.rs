@@ -234,13 +234,6 @@ fn build_compose_args(compose_file: &str, service_name: &Option<String>, action:
         args.push(env_file.to_string_lossy().to_string());
     }
 
-    // Add user-defined extra compose args (e.g. --env-file .env.production, --profile prod)
-    if let Some(ref extra) = compose_args {
-        for arg in extra.split_whitespace() {
-            args.push(arg.to_string());
-        }
-    }
-
     args.push("-f".to_string());
     args.push(compose_file.to_string());
 
@@ -267,6 +260,13 @@ fn build_compose_args(compose_file: &str, service_name: &Option<String>, action:
             }
         }
         _ => {}
+    }
+
+    // Add user-defined extra args after the action (e.g. --env-file .env.production, --profile prod)
+    if let Some(ref extra) = compose_args {
+        for arg in extra.split_whitespace() {
+            args.push(arg.to_string());
+        }
     }
 
     args
