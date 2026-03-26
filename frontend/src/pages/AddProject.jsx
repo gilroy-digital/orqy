@@ -31,6 +31,7 @@ export default function AddProject() {
     auto_deploy: true,
     compose_args: '',
     notify_url: '',
+    build_timeout_secs: 600,
   });
 
   // Repo validation state
@@ -205,6 +206,7 @@ export default function AddProject() {
         webhook_secret: form.webhook_secret || null,
         compose_args: form.compose_args || null,
         notify_url: form.notify_url || null,
+        build_timeout_secs: parseInt(form.build_timeout_secs),
         poll_interval_secs: parseInt(form.poll_interval_secs),
       };
       const project = await apiPost('/projects', payload);
@@ -412,9 +414,14 @@ export default function AddProject() {
                 <input className={inputClass} type="number" min="10" value={form.poll_interval_secs} onChange={update('poll_interval_secs')} />
               </div>
               <div>
-                <label className={labelClass}>Webhook Secret</label>
-                <input className={inputClass} type="text" autoComplete="off" value={form.webhook_secret} onChange={update('webhook_secret')} placeholder="Optional" />
+                <label className={labelClass}>Build Timeout (seconds)</label>
+                <input className={inputClass} type="number" min="60" value={form.build_timeout_secs} onChange={update('build_timeout_secs')} />
+                <p className="text-xs text-gray-500 mt-1">Auto-cancels after this duration</p>
               </div>
+            </div>
+            <div>
+              <label className={labelClass}>Webhook Secret</label>
+              <input className={inputClass} type="text" autoComplete="off" value={form.webhook_secret} onChange={update('webhook_secret')} placeholder="Optional" />
             </div>
             <div className="flex gap-6 mt-4">
               <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
