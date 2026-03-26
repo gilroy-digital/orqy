@@ -4,7 +4,7 @@ import { useApi, apiPost, apiDelete } from '../hooks/useApi';
 import { useDeployLogs } from '../hooks/useDeployLogs';
 import StatusBadge from '../components/StatusBadge';
 import LogViewer from '../components/LogViewer';
-import { Play, Trash2, GitBranch, Clock, ArrowLeft, Copy, ExternalLink, Pencil } from 'lucide-react';
+import { Play, Trash2, GitBranch, Clock, ArrowLeft, Copy, ExternalLink, Pencil, XCircle } from 'lucide-react';
 
 export default function ProjectDetail() {
   const { id } = useParams();
@@ -187,9 +187,26 @@ export default function ProjectDetail() {
               {selectedDeploy ? 'Deploy Logs' : 'Select a deploy to view logs'}
             </h2>
             {selectedDeploy?.status === 'running' && (
-              <span className={`text-xs ${connected ? 'text-emerald-400' : 'text-gray-500'}`}>
-                {connected ? 'Live' : 'Connecting...'}
-              </span>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={async () => {
+                    if (!confirm('Cancel this deploy?')) return;
+                    try {
+                      await apiPost(`/projects/${id}/deploys/${selectedDeploy.id}/cancel`);
+                      refetchDeploys();
+                    } catch (err) {
+                      alert('Cancel failed: ' + err.message);
+                    }
+                  }}
+                  className="flex items-center gap-1 px-2 py-1 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded text-xs transition-colors"
+                >
+                  <XCircle className="w-3.5 h-3.5" />
+                  Cancel
+                </button>
+                <span className={`text-xs ${connected ? 'text-emerald-400' : 'text-gray-500'}`}>
+                  {connected ? 'Live' : 'Connecting...'}
+                </span>
+              </div>
             )}
           </div>
           {selectedDeploy ? (

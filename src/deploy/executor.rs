@@ -29,6 +29,7 @@ pub async fn run_deploy(
     async fn run_cmd(
         pool: &PgPool,
         deploy_id: Uuid,
+        broadcaster: &DeployBroadcaster,
         tx: &tokio::sync::broadcast::Sender<DeployLog>,
         line_num: &mut i32,
         cmd: &str,
@@ -36,6 +37,11 @@ pub async fn run_deploy(
         cwd: &str,
         env_vars: Vec<(&str, &str)>,
     ) -> anyhow::Result<bool> {
+        // Check if cancelled before starting
+        if broadcaster.is_cancelled(deploy_id).await {
+            return Ok(false);
+        }
+
         // Log the command being run (redact PATs from URLs)
         let redacted_args: Vec<String> = args.iter().map(|a| {
             if a.contains('@') && a.starts_with("https://") {
@@ -52,13 +58,19 @@ pub async fn run_deploy(
         let mut command = Command::new(cmd);
         command.args(args).current_dir(cwd)
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+            .stderr(Stdio::piped())
+            .process_group(0); // Create new process group so we can kill the whole tree
 
         for (k, v) in env_vars {
             command.env(k, v);
         }
 
         let mut child = command.spawn()?;
+
+        // Register the PID so cancel can kill it
+        if let Some(pid) = child.id() {
+            broadcaster.set_pid(deploy_id, pid).await;
+        }
 
         // Stream stdout
         if let Some(stdout) = child.stdout.take() {
@@ -120,7 +132,7 @@ pub async fn run_deploy(
     // git fetch using authenticated URL directly
     let branch = &project.branch;
     let fetch_ok = run_cmd(
-        pool, deploy_id, &tx, &mut line_num,
+        pool, deploy_id, broadcaster, &tx, &mut line_num,
         "git", &["fetch", &repo_url, branch],
         &local_path, vec![],
     ).await?;
@@ -132,7 +144,7 @@ pub async fn run_deploy(
     }
 
     let reset_ok = run_cmd(
-        pool, deploy_id, &tx, &mut line_num,
+        pool, deploy_id, broadcaster, &tx, &mut line_num,
         "git", &["reset", "--hard", "FETCH_HEAD"],
         &local_path, vec![],
     ).await?;
@@ -168,7 +180,7 @@ pub async fn run_deploy(
     let compose_args = build_compose_args(&project.compose_file, &project.service_name, "down", &local_path, &project.compose_args);
     let compose_str_args: Vec<&str> = compose_args.iter().map(|s| s.as_str()).collect();
     let down_ok = run_cmd(
-        pool, deploy_id, &tx, &mut line_num,
+        pool, deploy_id, broadcaster, &tx, &mut line_num,
         "docker", &compose_str_args,
         &local_path, vec![],
     ).await?;
@@ -182,7 +194,7 @@ pub async fn run_deploy(
         let stop_args = build_compose_args(&project.compose_file, &project.service_name, "stop", &local_path, &project.compose_args);
         let stop_str_args: Vec<&str> = stop_args.iter().map(|s| s.as_str()).collect();
         let _ = run_cmd(
-            pool, deploy_id, &tx, &mut line_num,
+            pool, deploy_id, broadcaster, &tx, &mut line_num,
             "docker", &stop_str_args,
             &local_path, vec![],
         ).await;
@@ -190,7 +202,7 @@ pub async fn run_deploy(
         let rm_args = build_compose_args(&project.compose_file, &project.service_name, "rm", &local_path, &project.compose_args);
         let rm_str_args: Vec<&str> = rm_args.iter().map(|s| s.as_str()).collect();
         let _ = run_cmd(
-            pool, deploy_id, &tx, &mut line_num,
+            pool, deploy_id, broadcaster, &tx, &mut line_num,
             "docker", &rm_str_args,
             &local_path, vec![],
         ).await;
@@ -225,13 +237,16 @@ pub async fn run_deploy(
     let compose_args = build_compose_args(&project.compose_file, &project.service_name, "up", &local_path, &project.compose_args);
     let compose_str_args: Vec<&str> = compose_args.iter().map(|s| s.as_str()).collect();
     let up_ok = run_cmd(
-        pool, deploy_id, &tx, &mut line_num,
+        pool, deploy_id, broadcaster, &tx, &mut line_num,
         "docker", &compose_str_args,
         &local_path, vec![],
     ).await?;
 
-    let final_status = if up_ok { "success" } else { "failed" };
-    repo::update_deploy_status(pool, deploy_id, final_status, None, None).await?;
+    let cancelled = broadcaster.is_cancelled(deploy_id).await;
+    let final_status = if cancelled { "failed" } else if up_ok { "success" } else { "failed" };
+    if !cancelled {
+        repo::update_deploy_status(pool, deploy_id, final_status, None, None).await?;
+    }
 
     let log = repo::append_log(
         pool, deploy_id, line_num, "system",
