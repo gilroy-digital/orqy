@@ -23,8 +23,8 @@ pub async fn create_project(pool: &PgPool, input: &CreateProject, pat_encrypted:
     let project = sqlx::query_as::<_, Project>(
         r#"
         INSERT INTO projects (name, repo_url, branch, local_path, compose_file, service_name,
-                              pat_encrypted, poll_interval_secs, polling_enabled, webhook_secret, auto_deploy)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                              pat_encrypted, poll_interval_secs, polling_enabled, webhook_secret, auto_deploy, compose_args)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING *
         "#,
     )
@@ -39,6 +39,7 @@ pub async fn create_project(pool: &PgPool, input: &CreateProject, pat_encrypted:
     .bind(input.polling_enabled.unwrap_or(true))
     .bind(&input.webhook_secret)
     .bind(input.auto_deploy.unwrap_or(true))
+    .bind(&input.compose_args)
     .fetch_one(pool)
     .await?;
     Ok(project)
@@ -62,7 +63,7 @@ pub async fn update_project(
             name = $2, repo_url = $3, branch = $4, local_path = $5,
             compose_file = $6, service_name = $7, pat_encrypted = $8,
             poll_interval_secs = $9, polling_enabled = $10, webhook_secret = $11,
-            auto_deploy = $12, updated_at = NOW()
+            auto_deploy = $12, compose_args = $13, updated_at = NOW()
         WHERE id = $1
         RETURNING *
         "#,
@@ -79,6 +80,7 @@ pub async fn update_project(
     .bind(input.polling_enabled.unwrap_or(existing.polling_enabled))
     .bind(input.webhook_secret.as_ref().or(existing.webhook_secret.as_ref()))
     .bind(input.auto_deploy.unwrap_or(existing.auto_deploy))
+    .bind(input.compose_args.as_ref().or(existing.compose_args.as_ref()))
     .fetch_one(pool)
     .await?;
     Ok(Some(project))

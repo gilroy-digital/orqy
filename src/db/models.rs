@@ -16,6 +16,7 @@ pub struct Project {
     pub polling_enabled: bool,
     pub webhook_secret: Option<String>,
     pub auto_deploy: bool,
+    pub compose_args: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -28,11 +29,12 @@ pub struct CreateProject {
     pub local_path: String,
     pub compose_file: Option<String>,
     pub service_name: Option<String>,
-    pub pat: Option<String>, // plaintext, will be encrypted before storage
+    pub pat: Option<String>,
     pub poll_interval_secs: Option<i32>,
     pub polling_enabled: Option<bool>,
     pub webhook_secret: Option<String>,
     pub auto_deploy: Option<bool>,
+    pub compose_args: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -48,6 +50,7 @@ pub struct UpdateProject {
     pub polling_enabled: Option<bool>,
     pub webhook_secret: Option<String>,
     pub auto_deploy: Option<bool>,
+    pub compose_args: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
@@ -94,5 +97,6 @@ pub struct ProjectSummary {
     pub auto_deploy: bool,
     pub has_pat: bool,
     pub has_webhook_secret: bool,
+    pub compose_args: Option<String>,
     pub last_deploy: Option<Deploy>,
 }

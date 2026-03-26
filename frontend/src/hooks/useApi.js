@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 const BASE = '/api';
 
@@ -13,6 +13,8 @@ export function useApi(path, deps = [], { pollInterval } = {}) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const lastJson = useRef(null);
+  const initialized = useRef(false);
 
   const refetch = useCallback(async () => {
     if (!path) {
@@ -20,8 +22,7 @@ export function useApi(path, deps = [], { pollInterval } = {}) {
       setLoading(false);
       return;
     }
-    // Only show loading spinner on first fetch, not on polls
-    if (data === null) setLoading(true);
+    if (!initialized.current) setLoading(true);
     try {
       const res = await fetch(`${BASE}${path}`, { headers: getAuthHeaders() });
       if (res.status === 401) {
@@ -31,12 +32,20 @@ export function useApi(path, deps = [], { pollInterval } = {}) {
       }
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
       const json = await res.json();
-      setData(json);
+      const jsonStr = JSON.stringify(json);
+      // Only update state if data actually changed
+      if (jsonStr !== lastJson.current) {
+        lastJson.current = jsonStr;
+        setData(json);
+      }
       setError(null);
     } catch (e) {
       setError(e.message);
     } finally {
-      setLoading(false);
+      if (!initialized.current) {
+        initialized.current = true;
+        setLoading(false);
+      }
     }
   }, [path, ...deps]);
 

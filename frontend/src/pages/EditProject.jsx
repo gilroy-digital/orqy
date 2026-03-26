@@ -40,6 +40,7 @@ export default function EditProject() {
         polling_enabled: project.polling_enabled,
         webhook_secret: '',
         auto_deploy: project.auto_deploy,
+        compose_args: project.compose_args || '',
       });
       fetchBranches(project.repo_url, '');
       fetchContainers(project.local_path, project.compose_file);
@@ -119,6 +120,7 @@ export default function EditProject() {
       // Only send webhook_secret if user entered a new one
       if (!payload.webhook_secret) delete payload.webhook_secret;
       payload.service_name = payload.service_name || null;
+      payload.compose_args = payload.compose_args || null;
       payload.poll_interval_secs = parseInt(payload.poll_interval_secs);
 
       await apiPut(`/projects/${id}`, payload);
@@ -218,6 +220,12 @@ export default function EditProject() {
             )}
             {containersLoading && <p className="text-xs text-gray-500 mt-1">Loading services...</p>}
           </div>
+        </div>
+
+        <div>
+          <label className={labelClass}>Extra Compose Arguments</label>
+          <input className={inputClass} value={form.compose_args} onChange={update('compose_args')} placeholder="e.g. --env-file .env.production --profile prod" />
+          <p className="text-xs text-gray-500 mt-1">Additional flags passed to docker compose commands.</p>
         </div>
 
         <div className="border-t border-gray-800 pt-5">

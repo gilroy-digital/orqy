@@ -29,6 +29,7 @@ export default function AddProject() {
     polling_enabled: true,
     webhook_secret: '',
     auto_deploy: true,
+    compose_args: '',
   });
 
   // Repo validation state
@@ -201,6 +202,7 @@ export default function AddProject() {
         service_name: form.service_name || null,
         pat: form.pat || null,
         webhook_secret: form.webhook_secret || null,
+        compose_args: form.compose_args || null,
         poll_interval_secs: parseInt(form.poll_interval_secs),
       };
       const project = await apiPost('/projects', payload);
@@ -384,6 +386,12 @@ export default function AddProject() {
                 {containersLoading && <p className="text-xs text-gray-500 mt-1">Loading services...</p>}
                 <p className="text-xs text-gray-500 mt-1">Empty = rebuild all services</p>
               </div>
+            </div>
+
+            <div className="mt-3">
+              <label className={labelClass}>Extra Compose Arguments</label>
+              <input className={inputClass} value={form.compose_args} onChange={update('compose_args')} placeholder="e.g. --env-file .env.production --profile prod" />
+              <p className="text-xs text-gray-500 mt-1">Additional flags passed to docker compose commands.</p>
             </div>
           </div>
         )}

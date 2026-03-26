@@ -164,7 +164,8 @@ pub async fn run_deploy(
     let _ = tx.send(log);
     line_num += 1;
 
-    let compose_args = build_compose_args(&project.compose_file, &project.service_name, "down");
+    // First try compose down
+    let compose_args = build_compose_args(&project.compose_file, &project.service_name, "down", &local_path, &project.compose_args);
     let compose_str_args: Vec<&str> = compose_args.iter().map(|s| s.as_str()).collect();
     let down_ok = run_cmd(
         pool, deploy_id, &tx, &mut line_num,
@@ -173,9 +174,26 @@ pub async fn run_deploy(
     ).await?;
 
     if !down_ok {
-        let log = repo::append_log(pool, deploy_id, line_num, "system", "Warning: docker compose down failed, continuing anyway...").await?;
+        let log = repo::append_log(pool, deploy_id, line_num, "system", "Warning: docker compose down had issues, attempting cleanup...").await?;
         let _ = tx.send(log);
         line_num += 1;
+
+        // Force stop and remove any containers defined in the compose file
+        let stop_args = build_compose_args(&project.compose_file, &project.service_name, "stop", &local_path, &project.compose_args);
+        let stop_str_args: Vec<&str> = stop_args.iter().map(|s| s.as_str()).collect();
+        let _ = run_cmd(
+            pool, deploy_id, &tx, &mut line_num,
+            "docker", &stop_str_args,
+            &local_path, vec![],
+        ).await;
+
+        let rm_args = build_compose_args(&project.compose_file, &project.service_name, "rm", &local_path, &project.compose_args);
+        let rm_str_args: Vec<&str> = rm_args.iter().map(|s| s.as_str()).collect();
+        let _ = run_cmd(
+            pool, deploy_id, &tx, &mut line_num,
+            "docker", &rm_str_args,
+            &local_path, vec![],
+        ).await;
     }
 
     // Step 3: Docker compose up --build
@@ -183,7 +201,7 @@ pub async fn run_deploy(
     let _ = tx.send(log);
     line_num += 1;
 
-    let compose_args = build_compose_args(&project.compose_file, &project.service_name, "up");
+    let compose_args = build_compose_args(&project.compose_file, &project.service_name, "up", &local_path, &project.compose_args);
     let compose_str_args: Vec<&str> = compose_args.iter().map(|s| s.as_str()).collect();
     let up_ok = run_cmd(
         pool, deploy_id, &tx, &mut line_num,
@@ -204,23 +222,46 @@ pub async fn run_deploy(
     Ok(())
 }
 
-fn build_compose_args(compose_file: &str, service_name: &Option<String>, action: &str) -> Vec<String> {
+fn build_compose_args(compose_file: &str, service_name: &Option<String>, action: &str, local_path: &str, compose_args: &Option<String>) -> Vec<String> {
     let mut args = vec![
         "compose".to_string(),
-        "-f".to_string(),
-        compose_file.to_string(),
     ];
+
+    // Include .env file if it exists in the project directory
+    let env_file = std::path::Path::new(local_path).join(".env");
+    if env_file.exists() {
+        args.push("--env-file".to_string());
+        args.push(env_file.to_string_lossy().to_string());
+    }
+
+    // Add user-defined extra compose args (e.g. --env-file .env.production, --profile prod)
+    if let Some(ref extra) = compose_args {
+        for arg in extra.split_whitespace() {
+            args.push(arg.to_string());
+        }
+    }
+
+    args.push("-f".to_string());
+    args.push(compose_file.to_string());
 
     match action {
         "down" => {
             args.push("down".to_string());
             args.push("--remove-orphans".to_string());
         }
+        "stop" => {
+            args.push("stop".to_string());
+        }
+        "rm" => {
+            args.push("rm".to_string());
+            args.push("-f".to_string());
+        }
         "up" => {
             args.push("up".to_string());
             args.push("-d".to_string());
             args.push("--build".to_string());
             args.push("--force-recreate".to_string());
+            args.push("--remove-orphans".to_string());
             if let Some(ref svc) = service_name {
                 args.push(svc.clone());
             }
