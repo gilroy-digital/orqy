@@ -20,7 +20,8 @@ export function useApi(path, deps = [], { pollInterval } = {}) {
       setLoading(false);
       return;
     }
-    setLoading((prev) => data === null ? true : prev);
+    // Only show loading spinner on first fetch, not on polls
+    if (data === null) setLoading(true);
     try {
       const res = await fetch(`${BASE}${path}`, { headers: getAuthHeaders() });
       if (res.status === 401) {

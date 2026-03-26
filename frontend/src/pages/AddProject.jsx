@@ -116,8 +116,20 @@ export default function AddProject() {
       setRepoCheck(data);
       if (data.is_git_repo) {
         setPathValidated(true);
-        // Auto-detect compose file
         fetchComposeServices(path, form.compose_file);
+        // If repo URL wasn't set yet, auto-fill from the repo's remote
+        if (!repoValidated && data.remote_url) {
+          setForm((prev) => ({ ...prev, repo_url: data.remote_url }));
+          // Auto-validate with detected URL
+          fetchBranches(data.remote_url, form.pat).then(() => {
+            setRepoValidated(true);
+            // Auto-derive project name
+            const match = data.remote_url.match(/\/([^/]+?)(\.git)?$/);
+            if (match && !form.name) {
+              setForm((prev) => ({ ...prev, name: match[1] }));
+            }
+          });
+        }
       }
     } catch {
       setRepoCheck(null);
@@ -286,8 +298,7 @@ export default function AddProject() {
         </div>
 
         {/* ── Step 2: Local Path ── */}
-        {repoValidated && (
-          <div className={sectionClass}>
+        <div className={sectionClass}>
             <h2 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
               <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-xs flex items-center justify-center">2</span>
               Local Path
@@ -302,7 +313,7 @@ export default function AddProject() {
                   mode="directory"
                   placeholder="/opt/projects/my-app"
                 />
-                <p className="text-xs text-gray-500 mt-1">Navigate to the project directory or its parent to clone.</p>
+                <p className="text-xs text-gray-500 mt-1">Navigate to a project directory — repo URL and branch will be auto-detected if it's a git repo.</p>
               </div>
 
               {checkingPath && <p className="text-xs text-gray-500">Checking path...</p>}
@@ -338,7 +349,6 @@ export default function AddProject() {
               )}
             </div>
           </div>
-        )}
 
         {/* ── Step 3: Compose & Service ── */}
         {pathValidated && (
@@ -356,6 +366,7 @@ export default function AddProject() {
                   onChange={handleComposeFileChange}
                   mode="file"
                   placeholder="docker-compose.yml"
+                  startPath={form.local_path}
                 />
               </div>
               <div>

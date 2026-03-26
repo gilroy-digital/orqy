@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-export default function PathPicker({ value, onChange, mode = 'directory', placeholder }) {
+export default function PathPicker({ value, onChange, mode = 'directory', placeholder, startPath }) {
   const [open, setOpen] = useState(false);
   const [current, setCurrent] = useState('/');
   const [entries, setEntries] = useState([]);
@@ -28,11 +28,12 @@ export default function PathPicker({ value, onChange, mode = 'directory', placeh
 
   useEffect(() => {
     if (open) {
+      // Priority: current value > startPath prop > server default
       if (value && (value.startsWith('/') || value.match(/^[A-Za-z]:\\/))) {
         const dir = mode === 'file' ? value.substring(0, value.lastIndexOf('/')) || value.substring(0, value.lastIndexOf('\\')) : value;
         if (dir) { browse(dir); return; }
       }
-      // Fetch default home directory from server
+      if (startPath) { browse(startPath); return; }
       fetch('/api/homedir').then(r => r.json()).then(data => browse(data.path)).catch(() => browse('/'));
     }
   }, [open]);

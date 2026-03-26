@@ -203,6 +203,7 @@ export default function EditProject() {
               onChange={handleComposeFileChange}
               mode="file"
               placeholder="docker-compose.yml"
+              startPath={form.local_path}
             />
           </div>
           <div>
