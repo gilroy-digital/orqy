@@ -382,6 +382,10 @@ pub async fn check_repo(
     if !p.join(".git").exists() {
         return Json(RepoCheck { exists: true, is_git_repo: false, remote_url: None }).into_response();
     }
+    let _ = Command::new("git")
+        .args(["config", "--global", "--add", "safe.directory", &container_path])
+        .output()
+        .await;
     let remote = Command::new("git")
         .args(["remote", "get-url", "origin"])
         .current_dir(p)

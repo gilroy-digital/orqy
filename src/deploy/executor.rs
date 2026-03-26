@@ -111,6 +111,12 @@ pub async fn run_deploy(
     // Translate host path to container path
     let local_path = host_to_container(&project.local_path);
 
+    // Mark directory as safe for git (container runs as root, host files owned by different user)
+    let _ = Command::new("git")
+        .args(["config", "--global", "--add", "safe.directory", &local_path])
+        .output()
+        .await;
+
     // git fetch using authenticated URL directly
     let branch = &project.branch;
     let fetch_ok = run_cmd(
