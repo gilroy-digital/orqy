@@ -101,6 +101,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/containers", get(api::routes::list_containers))
         // Repo check & clone
         .route("/check-repo", get(api::routes::check_repo))
+        .route("/container-status", get(api::routes::container_status))
         .route("/clone", post(api::routes::clone_repo))
         .layer(middleware::from_fn_with_state(state.clone(), auth::auth_middleware));
 
