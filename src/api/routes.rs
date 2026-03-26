@@ -497,11 +497,24 @@ pub async fn check_repo(
         .await
         .ok()
         .and_then(|o| if o.status.success() {
-            Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
+            Some(ssh_to_https(&String::from_utf8_lossy(&o.stdout).trim().to_string()))
         } else {
             None
         });
     Json(RepoCheck { exists: true, is_git_repo: true, remote_url: remote }).into_response()
+}
+
+/// Convert SSH git URLs to HTTPS format
+/// e.g. git@github.com:Fleebee/repo.git -> https://github.com/Fleebee/repo.git
+fn ssh_to_https(url: &str) -> String {
+    if url.starts_with("git@") {
+        // git@github.com:user/repo.git -> https://github.com/user/repo.git
+        let without_prefix = url.strip_prefix("git@").unwrap_or(url);
+        if let Some((host, path)) = without_prefix.split_once(':') {
+            return format!("https://{}/{}", host, path);
+        }
+    }
+    url.to_string()
 }
 
 #[derive(Deserialize)]
