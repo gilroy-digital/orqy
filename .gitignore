@@ -8,6 +8,7 @@ frontend/dist/
 
 # Environment
 .env
+git-notes.toml
 
 # OS
 .DS_Store
