@@ -48,7 +48,12 @@ pub async fn get_setup_status(
     State(state): State<crate::api::AppState>,
 ) -> impl IntoResponse {
     let setup_complete = is_setup_complete(&state.pool).await;
-    let system_info = detect_system_info();
+    let mut system_info = detect_system_info();
+
+    // Override detected_os with user's saved selection
+    if let Ok(Some(saved_os)) = repo::get_setting(&state.pool, "host_os").await {
+        system_info["detected_os"] = serde_json::Value::String(saved_os);
+    }
 
     Json(serde_json::json!({
         "setup_complete": setup_complete,
