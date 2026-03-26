@@ -109,7 +109,7 @@ pub async fn run_deploy(
     };
 
     // Translate host path to container path
-    let local_path = host_to_container(&local_path);
+    let local_path = host_to_container(&project.local_path);
 
     // git fetch using authenticated URL directly
     let branch = &project.branch;
