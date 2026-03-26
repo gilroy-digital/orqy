@@ -13,9 +13,8 @@ services:
     volumes:
       # Mount Docker socket so orqy can manage containers
       - /var/run/docker.sock:/var/run/docker.sock
-      # Mount host filesystem — paths inside container match host paths
-      # Override HOST_MOUNT in .env if you only want to expose a specific directory
-      - ${HOST_MOUNT:-/}:${HOST_MOUNT:-/}
+      # Mount host filesystem at /host inside the container
+      - /:/host:rslave
     depends_on:
       db:
         condition: service_healthy

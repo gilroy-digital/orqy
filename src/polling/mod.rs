@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::crypto;
 use crate::db::{models::Project, repo};
 use crate::deploy::{executor, DeployBroadcaster};
+use crate::hostpath::host_to_container;
 use sqlx::PgPool;
 
 /// Tracks the last known commit SHA per project to detect changes.
@@ -114,9 +115,10 @@ async fn check_for_changes(
         project.repo_url.clone()
     };
 
+    let local_path = host_to_container(&project.local_path);
     let output = tokio::process::Command::new("git")
         .args(["ls-remote", &remote_url, &project.branch])
-        .current_dir(&project.local_path)
+        .current_dir(&local_path)
         .output()
         .await?;
 
@@ -138,7 +140,7 @@ async fn check_for_changes(
             // First time — get current local SHA to seed the cache
             let local = tokio::process::Command::new("git")
                 .args(["rev-parse", "HEAD"])
-                .current_dir(&project.local_path)
+                .current_dir(&local_path)
                 .output()
                 .await?;
             let local_sha = String::from_utf8_lossy(&local.stdout).trim().to_string();

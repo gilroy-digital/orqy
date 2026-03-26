@@ -6,6 +6,7 @@ use uuid::Uuid;
 use crate::crypto;
 use crate::db::{models::*, repo};
 use crate::deploy::DeployBroadcaster;
+use crate::hostpath::host_to_container;
 use sqlx::PgPool;
 
 /// Execute a full deploy cycle for a project:
@@ -107,12 +108,15 @@ pub async fn run_deploy(
         project.repo_url.clone()
     };
 
+    // Translate host path to container path
+    let local_path = host_to_container(&local_path);
+
     // git fetch using authenticated URL directly
     let branch = &project.branch;
     let fetch_ok = run_cmd(
         pool, deploy_id, &tx, &mut line_num,
         "git", &["fetch", &repo_url, branch],
-        &project.local_path, vec![],
+        &local_path, vec![],
     ).await?;
 
     if !fetch_ok {
@@ -124,7 +128,7 @@ pub async fn run_deploy(
     let reset_ok = run_cmd(
         pool, deploy_id, &tx, &mut line_num,
         "git", &["reset", "--hard", "FETCH_HEAD"],
-        &project.local_path, vec![],
+        &local_path, vec![],
     ).await?;
 
     if !reset_ok {
@@ -136,7 +140,7 @@ pub async fn run_deploy(
     // Get commit info
     let output = Command::new("git")
         .args(["log", "-1", "--format=%H|%s"])
-        .current_dir(&project.local_path)
+        .current_dir(&local_path)
         .output()
         .await?;
     let commit_info = String::from_utf8_lossy(&output.stdout);
@@ -159,7 +163,7 @@ pub async fn run_deploy(
     let down_ok = run_cmd(
         pool, deploy_id, &tx, &mut line_num,
         "docker", &compose_str_args,
-        &project.local_path, vec![],
+        &local_path, vec![],
     ).await?;
 
     if !down_ok {
@@ -178,7 +182,7 @@ pub async fn run_deploy(
     let up_ok = run_cmd(
         pool, deploy_id, &tx, &mut line_num,
         "docker", &compose_str_args,
-        &project.local_path, vec![],
+        &local_path, vec![],
     ).await?;
 
     let final_status = if up_ok { "success" } else { "failed" };

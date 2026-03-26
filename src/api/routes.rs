@@ -11,12 +11,11 @@ use crate::api::AppState;
 use crate::crypto;
 use crate::db::{models::*, repo};
 use crate::deploy::executor;
+use crate::hostpath::{host_to_container, container_to_host};
 use tokio::process::Command;
 
 // ── Filesystem browsing ──
 
-/// Detect a sensible default directory to browse.
-/// Checks common mount points for Mac/Windows/Linux host filesystems.
 pub async fn get_home_dir() -> impl IntoResponse {
     Json(serde_json::json!({ "path": "/" }))
 }
@@ -36,24 +35,34 @@ pub struct BrowseEntry {
 pub async fn browse_filesystem(
     Query(query): Query<BrowseQuery>,
 ) -> impl IntoResponse {
-    let base = query.path.unwrap_or_else(|| "/".to_string());
-    let base = std::path::Path::new(&base);
+    let host_path = query.path.unwrap_or_else(|| "/".to_string());
 
-    if !base.is_absolute() {
+    if !host_path.starts_with('/') {
         return (StatusCode::BAD_REQUEST, "Path must be absolute").into_response();
     }
+
+    // Map host path to container path
+    let container_path = host_to_container(&host_path);
+    let base = std::path::Path::new(&container_path);
 
     let base = match base.canonicalize() {
         Ok(p) => p,
         Err(_) => return (StatusCode::NOT_FOUND, "Path does not exist").into_response(),
     };
 
+    let current_host = container_to_host(&base.to_string_lossy());
+
     let mut entries = Vec::new();
 
-    if let Some(parent) = base.parent() {
+    // Add parent (in host path terms)
+    if current_host != "/" {
+        let parent = std::path::Path::new(&current_host)
+            .parent()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| "/".to_string());
         entries.push(BrowseEntry {
             name: "..".to_string(),
-            path: parent.to_string_lossy().to_string(),
+            path: parent,
             is_dir: true,
         });
     }
@@ -67,9 +76,17 @@ pub async fn browse_filesystem(
         let metadata = match entry.metadata() { Ok(m) => m, Err(_) => continue };
         let name = entry.file_name().to_string_lossy().to_string();
         if name.starts_with('.') { continue; }
+
+        // Return host paths to the frontend
+        let entry_host_path = if current_host == "/" {
+            format!("/{}", name)
+        } else {
+            format!("{}/{}", current_host, name)
+        };
+
         entries.push(BrowseEntry {
             name,
-            path: entry.path().to_string_lossy().to_string(),
+            path: entry_host_path,
             is_dir: metadata.is_dir(),
         });
     }
@@ -81,7 +98,7 @@ pub async fn browse_filesystem(
     });
 
     Json(serde_json::json!({
-        "current": base.to_string_lossy(),
+        "current": current_host,
         "entries": entries,
     })).into_response()
 }
@@ -342,7 +359,8 @@ pub struct RepoCheck {
 pub async fn check_repo(
     Query(query): Query<CheckRepoQuery>,
 ) -> impl IntoResponse {
-    let p = std::path::Path::new(&query.path);
+    let container_path = host_to_container(&query.path);
+    let p = std::path::Path::new(&container_path);
     if !p.exists() {
         return Json(RepoCheck { exists: false, is_git_repo: false, remote_url: None }).into_response();
     }
@@ -397,7 +415,7 @@ pub async fn clone_repo(
         args.push(branch.clone());
     }
     args.push(url);
-    args.push(input.path.clone());
+    args.push(host_to_container(&input.path));
 
     let output = match Command::new("git")
         .args(&args)
@@ -432,10 +450,11 @@ pub async fn list_containers(
 ) -> impl IntoResponse {
     // If a path and compose file are provided, list services from the compose file on host
     if let Some(ref dir) = query.path {
+        let container_dir = host_to_container(dir);
         let compose_file = query.compose_file.as_deref().unwrap_or("docker-compose.yml");
         let output = match Command::new("docker")
             .args(["compose", "-f", compose_file, "config", "--services"])
-            .current_dir(dir)
+            .current_dir(&container_dir)
             .output()
             .await
         {

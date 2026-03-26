@@ -3,6 +3,7 @@ mod auth;
 mod crypto;
 mod db;
 mod deploy;
+pub mod hostpath;
 mod polling;
 mod webhook;
 
