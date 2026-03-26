@@ -1,0 +1,48 @@
+services:
+  orqy:
+    build: .
+    container_name: orqy
+    restart: unless-stopped
+    ports:
+      - "3456:3456"
+    environment:
+      DATABASE_URL: postgres://orqy:orqy@db:5432/orqy
+      ENCRYPTION_SECRET: ${ENCRYPTION_SECRET:-change-me-in-production}
+      PORT: 3456
+      RUST_LOG: orqy=info
+    volumes:
+      # Mount Docker socket so orqy can manage containers
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Mount host filesystem so orqy can browse, clone, and deploy
+      # Mac: /Users, Windows: /c/Users or similar, Linux: /home
+      - ${HOST_MOUNT:-/Users}:${HOST_MOUNT:-/Users}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - orqy-net
+
+  db:
+    image: postgres:16-alpine
+    container_name: orqy-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: orqy
+      POSTGRES_PASSWORD: orqy
+      POSTGRES_DB: orqy
+    volumes:
+      - orqy-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orqy"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - orqy-net
+
+volumes:
+  orqy-pgdata:
+
+networks:
+  orqy-net:
+    driver: bridge
