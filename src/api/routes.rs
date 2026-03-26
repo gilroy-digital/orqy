@@ -158,6 +158,7 @@ pub async fn get_project(
                 has_webhook_secret: p.webhook_secret.is_some(),
                 compose_args: p.compose_args,
                 notify_url: p.notify_url,
+                build_timeout_secs: p.build_timeout_secs,
                 last_deploy,
             }).into_response()
         }
