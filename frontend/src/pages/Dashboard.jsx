@@ -53,7 +53,7 @@ export default function Dashboard() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-white">Projec</h1>
+        <h1 className="text-2xl font-bold text-white">Projects</h1>
         <button
           onClick={refetch}
           className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-gray-800 transition-colors"
