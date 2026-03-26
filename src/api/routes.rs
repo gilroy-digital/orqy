@@ -154,6 +154,7 @@ pub async fn get_project(
                 auto_deploy: p.auto_deploy,
                 has_pat: p.pat_encrypted.is_some(),
                 has_webhook_secret: p.webhook_secret.is_some(),
+                compose_args: p.compose_args,
                 last_deploy,
             }).into_response()
         }
