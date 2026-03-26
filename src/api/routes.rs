@@ -257,6 +257,21 @@ pub async fn trigger_deploy(
     }))).into_response()
 }
 
+pub async fn cancel_deploy(
+    State(state): State<AppState>,
+    Path((_project_id, deploy_id)): Path<(Uuid, Uuid)>,
+) -> impl IntoResponse {
+    // Kill the running process and mark as cancelled
+    state.broadcaster.cancel(deploy_id).await;
+
+    match repo::update_deploy_status(&state.pool, deploy_id, "failed", None, Some("Cancelled by user")).await {
+        Ok(_) => {
+            Json(serde_json::json!({ "status": "cancelled" })).into_response()
+        }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
 // ── Deploys ──
 
 #[derive(Deserialize)]

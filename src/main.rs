@@ -83,6 +83,7 @@ async fn main() -> anyhow::Result<()> {
         // Deploy history & logs
         .route("/projects/:project_id/deploys", get(api::routes::list_deploys))
         .route("/projects/:project_id/deploys/:deploy_id/logs", get(api::routes::get_deploy_logs))
+        .route("/projects/:project_id/deploys/:deploy_id/cancel", post(api::routes::cancel_deploy))
         // WebSocket for live logs
         .route("/projects/:project_id/deploys/:deploy_id/ws", get(api::ws::deploy_logs_ws))
         // Settings

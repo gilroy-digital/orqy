@@ -12,16 +12,21 @@ use crate::db::models::DeployLog;
 pub struct DeployBroadcaster {
     /// Map of deploy_id -> broadcast sender
     channels: Arc<tokio::sync::RwLock<HashMap<Uuid, broadcast::Sender<DeployLog>>>>,
+    /// Map of deploy_id -> active child process PID
+    active_pids: Arc<tokio::sync::RwLock<HashMap<Uuid, u32>>>,
+    /// Set of deploy_ids that have been cancelled
+    cancelled: Arc<tokio::sync::RwLock<std::collections::HashSet<Uuid>>>,
 }
 
 impl DeployBroadcaster {
     pub fn new() -> Self {
         Self {
             channels: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+            active_pids: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+            cancelled: Arc::new(tokio::sync::RwLock::new(std::collections::HashSet::new())),
         }
     }
 
-    /// Get or create a broadcast channel for a deploy.
     pub async fn get_sender(&self, deploy_id: Uuid) -> broadcast::Sender<DeployLog> {
         let mut channels = self.channels.write().await;
         channels
@@ -33,15 +38,36 @@ impl DeployBroadcaster {
             .clone()
     }
 
-    /// Subscribe to log updates for a deploy.
     pub async fn subscribe(&self, deploy_id: Uuid) -> broadcast::Receiver<DeployLog> {
         let sender = self.get_sender(deploy_id).await;
         sender.subscribe()
     }
 
-    /// Clean up channel when deploy is done.
     pub async fn remove(&self, deploy_id: Uuid) {
-        let mut channels = self.channels.write().await;
-        channels.remove(&deploy_id);
+        self.channels.write().await.remove(&deploy_id);
+        self.active_pids.write().await.remove(&deploy_id);
+        self.cancelled.write().await.remove(&deploy_id);
+    }
+
+    /// Register a child process PID for a deploy
+    pub async fn set_pid(&self, deploy_id: Uuid, pid: u32) {
+        self.active_pids.write().await.insert(deploy_id, pid);
+    }
+
+    /// Mark a deploy as cancelled and kill its active process
+    pub async fn cancel(&self, deploy_id: Uuid) {
+        self.cancelled.write().await.insert(deploy_id);
+        // Kill the active child process if any
+        if let Some(pid) = self.active_pids.read().await.get(&deploy_id) {
+            // Kill the process group (negative PID kills the group)
+            unsafe {
+                libc::kill(-(*pid as i32), libc::SIGKILL);
+            }
+        }
+    }
+
+    /// Check if a deploy has been cancelled
+    pub async fn is_cancelled(&self, deploy_id: Uuid) -> bool {
+        self.cancelled.read().await.contains(&deploy_id)
     }
 }
