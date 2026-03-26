@@ -5,6 +5,7 @@ import { GitBranch, Clock, Rocket, RefreshCw, Trash2 } from 'lucide-react';
 
 export default function Dashboard() {
   const { data: projects, loading, error, refetch } = useApi('/projects', [], { pollInterval: 5000 });
+  const { data: containerStatus } = useApi('/container-status', [], { pollInterval: 15000 });
 
   const handleDelete = async (e, projectId, projectName) => {
     e.preventDefault();
@@ -102,13 +103,15 @@ export default function Dashboard() {
             </div>
 
             <div className="flex items-center gap-3 mt-4 pt-3 border-t border-gray-800 text-xs">
+              {containerStatus && containerStatus[project.id] && (
+                <span className={containerStatus[project.id].healthy ? 'text-emerald-400' : 'text-red-400'}>
+                  {containerStatus[project.id].healthy ? 'Running' : 'Down'}
+                </span>
+              )}
               <span className={project.polling_enabled ? 'text-emerald-400' : 'text-gray-600'}>
-                {project.polling_enabled ? 'Polling ON' : 'Polling OFF'}
+                {project.polling_enabled ? 'Polling' : 'No polling'}
               </span>
-              <span className={project.auto_deploy ? 'text-emerald-400' : 'text-gray-600'}>
-                {project.auto_deploy ? 'Auto-deploy ON' : 'Auto-deploy OFF'}
-              </span>
-              {project.has_pat && <span className="text-amber-400">PAT set</span>}
+              {project.has_pat && <span className="text-amber-400">PAT</span>}
             </div>
           </Link>
         ))}

@@ -103,6 +103,76 @@ pub async fn browse_filesystem(
     })).into_response()
 }
 
+// ── Container status ──
+
+pub async fn container_status(
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    // Get all running container names in one docker call
+    let output = Command::new("docker")
+        .args(["ps", "--format", "{{.Names}}\t{{.Status}}"])
+        .output()
+        .await;
+
+    let running: HashMap<String, String> = match output {
+        Ok(o) if o.status.success() => {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .filter_map(|line| {
+                    let parts: Vec<&str> = line.splitn(2, '\t').collect();
+                    if parts.len() == 2 {
+                        Some((parts[0].to_string(), parts[1].to_string()))
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        }
+        _ => HashMap::new(),
+    };
+
+    // Match containers to projects by service/container name
+    let projects = repo::list_projects(&state.pool).await.unwrap_or_default();
+    let mut statuses: HashMap<String, serde_json::Value> = HashMap::new();
+
+    for project in &projects {
+        let local_path = host_to_container(&project.local_path);
+        // Get container names from compose config
+        let compose_output = Command::new("docker")
+            .args(["compose", "-f", &project.compose_file, "ps", "-a", "--format", "{{.Name}}\t{{.Status}}"])
+            .current_dir(&local_path)
+            .output()
+            .await;
+
+        let mut containers = Vec::new();
+        if let Ok(o) = compose_output {
+            if o.status.success() {
+                for line in String::from_utf8_lossy(&o.stdout).lines() {
+                    let parts: Vec<&str> = line.splitn(2, '\t').collect();
+                    if parts.len() == 2 {
+                        containers.push(serde_json::json!({
+                            "name": parts[0],
+                            "status": parts[1],
+                            "running": parts[1].to_lowercase().contains("up"),
+                        }));
+                    }
+                }
+            }
+        }
+
+        let all_up = !containers.is_empty() && containers.iter().all(|c| c["running"].as_bool().unwrap_or(false));
+
+        statuses.insert(project.id.to_string(), serde_json::json!({
+            "healthy": all_up,
+            "containers": containers,
+        }));
+    }
+
+    Json(statuses).into_response()
+}
+
+use std::collections::HashMap;
+
 // ── Projects ──
 
 pub async fn list_projects(State(state): State<AppState>) -> impl IntoResponse {
