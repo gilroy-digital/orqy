@@ -80,6 +80,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/projects/:id", get(api::routes::get_project).put(api::routes::update_project).delete(api::routes::delete_project))
         // Deploy trigger
         .route("/projects/:id/deploy", post(api::routes::trigger_deploy))
+        .route("/projects/:id/containers", post(api::routes::control_containers))
         // Deploy history & logs
         .route("/projects/:project_id/deploys", get(api::routes::list_deploys))
         .route("/projects/:project_id/deploys/:deploy_id/logs", get(api::routes::get_deploy_logs))
