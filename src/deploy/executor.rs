@@ -335,20 +335,22 @@ fn build_compose_args(compose_file: &str, service_name: &Option<String>, action:
         "compose".to_string(),
     ];
 
-    // The Docker CLI runs inside the Orqy container, so -f must use the
-    // container path (e.g. /host/data/apps/.../compose.yml) so the CLI can
-    // read the file. However, volume mounts like ".:/app" are resolved by the
-    // Docker daemon on the host. We set --project-directory to the host path
-    // so the daemon resolves relative paths (volumes, env_file, build context)
-    // correctly against the real host filesystem.
+    // Orqy runs inside a container with the host filesystem at /host.
+    // The Docker CLI (inside Orqy) needs the container path to read the
+    // compose file, env_file, Dockerfiles, etc. The Docker daemon resolves
+    // volume mounts via the CLI which passes them through — since the daemon
+    // communicates over the socket, paths in the compose file are what the
+    // CLI sends. We use the container path for everything so the CLI can
+    // read all referenced files. For volume mounts like ".:/app", "." resolves
+    // to the project directory (/host/...) which the daemon receives as-is.
+    // Since the host fs is bind-mounted at /host, /host/data/... IS a valid
+    // path on the host (Docker daemon sees it through its own mount namespace).
     let container_path = host_to_container(host_path);
     let compose_path = if std::path::Path::new(compose_file).is_relative() {
         std::path::Path::new(&container_path).join(compose_file).to_string_lossy().to_string()
     } else {
         compose_file.to_string()
     };
-    args.push("--project-directory".to_string());
-    args.push(host_path.to_string());
     args.push("-f".to_string());
     args.push(compose_path);
 
