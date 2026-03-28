@@ -335,15 +335,10 @@ fn build_compose_args(compose_file: &str, service_name: &Option<String>, action:
         "compose".to_string(),
     ];
 
-    // Check for .env at the container path (where we can read the filesystem),
-    // but pass the host path to docker (which the daemon resolves on the host).
-    let container_path = host_to_container(host_path);
-    let env_file_container = std::path::Path::new(&container_path).join(".env");
-    if env_file_container.exists() {
-        let env_file_host = std::path::Path::new(host_path).join(".env");
-        args.push("--env-file".to_string());
-        args.push(env_file_host.to_string_lossy().to_string());
-    }
+    // Docker compose auto-loads .env from the compose file's directory when
+    // using -f with an absolute path. No need to pass --env-file explicitly —
+    // doing so breaks when Orqy runs in a container because the path we can
+    // verify (container path) differs from what Docker sees (host path).
 
     // Compose file path: if relative, resolve against the host project dir
     let compose_path = if std::path::Path::new(compose_file).is_relative() {
