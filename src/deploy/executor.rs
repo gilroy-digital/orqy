@@ -335,17 +335,20 @@ fn build_compose_args(compose_file: &str, service_name: &Option<String>, action:
         "compose".to_string(),
     ];
 
-    // Docker compose auto-loads .env from the compose file's directory when
-    // using -f with an absolute path. No need to pass --env-file explicitly —
-    // doing so breaks when Orqy runs in a container because the path we can
-    // verify (container path) differs from what Docker sees (host path).
-
-    // Compose file path: if relative, resolve against the host project dir
+    // The Docker CLI runs inside the Orqy container, so -f must use the
+    // container path (e.g. /host/data/apps/.../compose.yml) so the CLI can
+    // read the file. However, volume mounts like ".:/app" are resolved by the
+    // Docker daemon on the host. We set --project-directory to the host path
+    // so the daemon resolves relative paths (volumes, env_file, build context)
+    // correctly against the real host filesystem.
+    let container_path = host_to_container(host_path);
     let compose_path = if std::path::Path::new(compose_file).is_relative() {
-        std::path::Path::new(host_path).join(compose_file).to_string_lossy().to_string()
+        std::path::Path::new(&container_path).join(compose_file).to_string_lossy().to_string()
     } else {
         compose_file.to_string()
     };
+    args.push("--project-directory".to_string());
+    args.push(host_path.to_string());
     args.push("-f".to_string());
     args.push(compose_path);
 
