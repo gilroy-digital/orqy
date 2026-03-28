@@ -146,8 +146,10 @@ async fn run_deploy_inner(
         project.repo_url.clone()
     };
 
-    // Translate host path to container path
+    // Container path for git (runs inside this container, needs /host prefix)
+    // Host path for docker (daemon runs on the host, needs real host paths)
     let local_path = host_to_container(&project.local_path);
+    let host_path = project.local_path.clone();
 
     // Mark directory as safe for git (container runs as root, host files owned by different user)
     let _ = Command::new("git")
@@ -203,7 +205,9 @@ async fn run_deploy_inner(
     line_num += 1;
 
     // First try compose down
-    let compose_args = build_compose_args(&project.compose_file, &project.service_name, "down", &local_path, &project.compose_args);
+    // Docker commands use host_path: the Docker daemon runs on the host and
+    // resolves relative paths (like "." in volume mounts) against cwd.
+    let compose_args = build_compose_args(&project.compose_file, &project.service_name, "down", &host_path, &project.compose_args);
     let compose_str_args: Vec<&str> = compose_args.iter().map(|s| s.as_str()).collect();
     let down_ok = run_cmd(
         pool, deploy_id, broadcaster, &tx, &mut line_num,
@@ -217,7 +221,7 @@ async fn run_deploy_inner(
         line_num += 1;
 
         // Force stop and remove any containers defined in the compose file
-        let stop_args = build_compose_args(&project.compose_file, &project.service_name, "stop", &local_path, &project.compose_args);
+        let stop_args = build_compose_args(&project.compose_file, &project.service_name, "stop", &host_path, &project.compose_args);
         let stop_str_args: Vec<&str> = stop_args.iter().map(|s| s.as_str()).collect();
         let _ = run_cmd(
             pool, deploy_id, broadcaster, &tx, &mut line_num,
@@ -225,7 +229,7 @@ async fn run_deploy_inner(
             &local_path, vec![],
         ).await;
 
-        let rm_args = build_compose_args(&project.compose_file, &project.service_name, "rm", &local_path, &project.compose_args);
+        let rm_args = build_compose_args(&project.compose_file, &project.service_name, "rm", &host_path, &project.compose_args);
         let rm_str_args: Vec<&str> = rm_args.iter().map(|s| s.as_str()).collect();
         let _ = run_cmd(
             pool, deploy_id, broadcaster, &tx, &mut line_num,
@@ -235,7 +239,7 @@ async fn run_deploy_inner(
     }
 
     // Force-remove any existing containers from this compose project
-    let ps_args = build_compose_args(&project.compose_file, &project.service_name, "ps", &local_path, &project.compose_args);
+    let ps_args = build_compose_args(&project.compose_file, &project.service_name, "ps", &host_path, &project.compose_args);
     let ps_str_args: Vec<&str> = ps_args.iter().map(|s| s.as_str()).collect();
     if let Ok(output) = Command::new("docker")
         .args(&ps_str_args)
@@ -260,7 +264,7 @@ async fn run_deploy_inner(
     let _ = tx.send(log);
     line_num += 1;
 
-    let compose_args = build_compose_args(&project.compose_file, &project.service_name, "up", &local_path, &project.compose_args);
+    let compose_args = build_compose_args(&project.compose_file, &project.service_name, "up", &host_path, &project.compose_args);
     let compose_str_args: Vec<&str> = compose_args.iter().map(|s| s.as_str()).collect();
     let up_ok = run_cmd(
         pool, deploy_id, broadcaster, &tx, &mut line_num,
@@ -326,20 +330,29 @@ async fn send_deploy_notification(
     }
 }
 
-fn build_compose_args(compose_file: &str, service_name: &Option<String>, action: &str, local_path: &str, compose_args: &Option<String>) -> Vec<String> {
+fn build_compose_args(compose_file: &str, service_name: &Option<String>, action: &str, host_path: &str, compose_args: &Option<String>) -> Vec<String> {
     let mut args = vec![
         "compose".to_string(),
     ];
 
-    // Include .env file if it exists in the project directory
-    let env_file = std::path::Path::new(local_path).join(".env");
-    if env_file.exists() {
+    // Check for .env at the container path (where we can read the filesystem),
+    // but pass the host path to docker (which the daemon resolves on the host).
+    let container_path = host_to_container(host_path);
+    let env_file_container = std::path::Path::new(&container_path).join(".env");
+    if env_file_container.exists() {
+        let env_file_host = std::path::Path::new(host_path).join(".env");
         args.push("--env-file".to_string());
-        args.push(env_file.to_string_lossy().to_string());
+        args.push(env_file_host.to_string_lossy().to_string());
     }
 
+    // Compose file path: if relative, resolve against the host project dir
+    let compose_path = if std::path::Path::new(compose_file).is_relative() {
+        std::path::Path::new(host_path).join(compose_file).to_string_lossy().to_string()
+    } else {
+        compose_file.to_string()
+    };
     args.push("-f".to_string());
-    args.push(compose_file.to_string());
+    args.push(compose_path);
 
     match action {
         "down" => {
