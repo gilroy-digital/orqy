@@ -91,6 +91,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/settings", get(api::routes::get_settings))
         .route("/settings/pat", post(api::routes::set_global_pat).delete(api::routes::delete_global_pat))
         .route("/settings/os", post(api::routes::set_os))
+        .route("/settings/webhooks", post(api::routes::set_webhooks))
         .route("/settings/update", post(api::routes::self_update))
         .route("/settings/reset", post(api::routes::factory_reset))
         // Filesystem browsing

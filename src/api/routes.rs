@@ -449,10 +449,41 @@ pub async fn get_settings(State(state): State<AppState>) -> impl IntoResponse {
 
     let host_os = repo::get_setting(&state.pool, "host_os").await.ok().flatten();
 
+    let webhook_success = repo::get_setting(&state.pool, "webhook_success").await.ok().flatten();
+    let webhook_running = repo::get_setting(&state.pool, "webhook_running").await.ok().flatten();
+    let webhook_failed = repo::get_setting(&state.pool, "webhook_failed").await.ok().flatten();
+
     Json(serde_json::json!({
         "has_global_pat": has_global_pat,
         "host_os": host_os,
+        "webhook_success": webhook_success,
+        "webhook_running": webhook_running,
+        "webhook_failed": webhook_failed,
     })).into_response()
+}
+
+#[derive(Deserialize)]
+pub struct SetWebhooksRequest {
+    pub webhook_success: Option<String>,
+    pub webhook_running: Option<String>,
+    pub webhook_failed: Option<String>,
+}
+
+pub async fn set_webhooks(
+    State(state): State<AppState>,
+    Json(input): Json<SetWebhooksRequest>,
+) -> impl IntoResponse {
+    for (key, val) in [
+        ("webhook_success", &input.webhook_success),
+        ("webhook_running", &input.webhook_running),
+        ("webhook_failed", &input.webhook_failed),
+    ] {
+        match val {
+            Some(url) if !url.is_empty() => { let _ = repo::set_setting(&state.pool, key, url).await; }
+            _ => { let _ = repo::delete_setting(&state.pool, key).await; }
+        }
+    }
+    StatusCode::OK.into_response()
 }
 
 #[derive(Deserialize)]
