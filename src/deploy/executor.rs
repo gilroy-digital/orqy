@@ -127,6 +127,11 @@ async fn run_deploy_inner(
     // Mark deploy as running
     repo::update_deploy_status(pool, deploy_id, "running", None, None).await?;
 
+    // Send "running" webhook
+    if let Ok(Some(url)) = repo::get_setting(pool, "webhook_running").await {
+        send_deploy_notification(&url, project, deploy_id, "running", None, None).await;
+    }
+
     // Step 1: Git pull
     let log = repo::append_log(pool, deploy_id, line_num, "system", "=== Step 1: Pulling latest code ===").await?;
     let _ = tx.send(log);
@@ -284,9 +289,20 @@ async fn run_deploy_inner(
     ).await?;
     let _ = tx.send(log);
 
-    // Send outbound webhook notification
+    // Send outbound webhook notifications
+    // 1. Project-level notify_url (legacy, fires for all statuses)
     if let Some(ref url) = project.notify_url {
         send_deploy_notification(url, project, deploy_id, final_status, sha, msg).await;
+    }
+
+    // 2. Global webhooks by status (project can override via notify_url)
+    let webhook_key = match final_status {
+        "success" => "webhook_success",
+        "failed" => "webhook_failed",
+        _ => "webhook_running",
+    };
+    if let Ok(Some(global_url)) = repo::get_setting(pool, webhook_key).await {
+        send_deploy_notification(&global_url, project, deploy_id, final_status, sha, msg).await;
     }
 
     broadcaster.remove(deploy_id).await;

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useApi, apiPost, apiDelete } from '../hooks/useApi';
 import { useAuth } from '../hooks/useAuth';
-import { Shield, Check, Trash2, Monitor, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Shield, Check, Trash2, Monitor, AlertTriangle, RefreshCw, Bell } from 'lucide-react';
 
 const OS_LABELS = { mac: 'macOS', windows: 'Windows', linux: 'Linux', unknown: 'Unknown' };
 
@@ -91,6 +91,50 @@ export default function Settings() {
           >
             {saved ? <><Check className="w-4 h-4" /> Saved</> : saving ? 'Saving...' : settings?.has_global_pat ? 'Update PAT' : 'Save PAT'}
           </button>
+        </div>
+      </div>
+
+      {/* Global Webhooks */}
+      <div className="mt-6 bg-gray-900 border border-gray-800 rounded-xl p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <Bell className="w-5 h-5 text-indigo-400" />
+          <h2 className="text-lg font-semibold text-white">Global Webhooks</h2>
+        </div>
+        <p className="text-sm text-gray-400 mb-4">
+          Receive notifications when any project deploys. Per-project URLs in project settings will also fire.
+        </p>
+        <div className="space-y-3">
+          {[
+            { key: 'webhook_running', label: 'Running', desc: 'When a deploy starts', color: 'text-indigo-400' },
+            { key: 'webhook_success', label: 'Success', desc: 'When a deploy succeeds', color: 'text-emerald-400' },
+            { key: 'webhook_failed', label: 'Failed', desc: 'When a deploy fails', color: 'text-red-400' },
+          ].map(({ key, label, desc, color }) => (
+            <div key={key}>
+              <label className="block text-sm font-medium text-gray-300 mb-1">
+                <span className={color}>{label}</span> <span className="text-gray-500 font-normal">— {desc}</span>
+              </label>
+              <input
+                type="text"
+                autoComplete="off"
+                defaultValue={settings?.[key] || ''}
+                onBlur={async (e) => {
+                  try {
+                    await apiPost('/settings/webhooks', {
+                      [key]: e.target.value || null,
+                      ...Object.fromEntries(
+                        ['webhook_running', 'webhook_success', 'webhook_failed']
+                          .filter(k => k !== key)
+                          .map(k => [k, settings?.[k] || null])
+                      ),
+                    });
+                    refetch();
+                  } catch {}
+                }}
+                placeholder="https://hooks.slack.com/... or any URL"
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm font-mono"
+              />
+            </div>
+          ))}
         </div>
       </div>
 
