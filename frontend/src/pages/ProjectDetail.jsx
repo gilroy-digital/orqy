@@ -123,7 +123,20 @@ export default function ProjectDetail() {
             <code className="text-xs text-gray-400 break-all">{webhookUrl}</code>
           </div>
           <button
-            onClick={() => navigator.clipboard.writeText(webhookUrl)}
+            onClick={() => {
+              if (navigator.clipboard?.writeText) {
+                navigator.clipboard.writeText(webhookUrl).catch(() => {});
+              } else {
+                const ta = document.createElement('textarea');
+                ta.value = webhookUrl;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+              }
+            }}
             className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-gray-800"
             title="Copy webhook URL"
           >
