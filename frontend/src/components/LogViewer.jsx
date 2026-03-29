@@ -2,6 +2,17 @@ import { useEffect, useRef } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { useState } from 'react';
 
+function fallbackCopy(text) {
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand('copy');
+  document.body.removeChild(textarea);
+}
+
 const streamColors = {
   stdout: 'text-gray-400',
   stderr: 'text-red-400',
@@ -21,7 +32,12 @@ export default function LogViewer({ logs }) {
       const time = l.created_at ? new Date(l.created_at).toLocaleTimeString() : '';
       return `${time} ${l.content}`;
     }).join('\n');
-    navigator.clipboard.writeText(text);
+    // Fallback for non-HTTPS contexts where navigator.clipboard is unavailable
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+    } else {
+      fallbackCopy(text);
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
