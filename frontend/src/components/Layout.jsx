@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { Settings, Plus, LogOut, HelpCircle, Heart } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import FloatingTicketButton from './FloatingTicketButton';
 
 function OrqyLogo({ animate }) {
   return (
@@ -114,6 +115,7 @@ export default function Layout() {
           </a>
         </div>
       </footer>
+      <FloatingTicketButton />
     </div>
   );
 }

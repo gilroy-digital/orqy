@@ -1,0 +1,26 @@
+# Local development dependencies only.
+#
+# The backend (cargo run) and frontend (vite) run natively on the host — see
+# run-dev.sh. This file provides just the Postgres they talk to, on its own
+# port and its own volume so it never touches the production database.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: orqy_dev_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: orqy
+      POSTGRES_PASSWORD: orqy
+      POSTGRES_DB: orqy
+    ports:
+      - "127.0.0.1:5443:5432"
+    volumes:
+      - orqy-dev-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orqy"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  orqy-dev-pgdata:

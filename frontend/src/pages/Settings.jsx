@@ -1,16 +1,38 @@
-import { useState } from 'react';
-import { useApi, apiPost, apiDelete } from '../hooks/useApi';
+import { useState, useEffect } from 'react';
+import { useApi, apiPost, apiPut, apiDelete } from '../hooks/useApi';
 import { useAuth } from '../hooks/useAuth';
-import { Shield, Check, Trash2, Monitor, AlertTriangle, RefreshCw, Bell } from 'lucide-react';
+import { Shield, Check, Trash2, Monitor, AlertTriangle, RefreshCw, Bell, User } from 'lucide-react';
 
 const OS_LABELS = { mac: 'macOS', windows: 'Windows', linux: 'Linux', unknown: 'Unknown' };
 
 export default function Settings() {
-  const { systemInfo } = useAuth();
+  const { systemInfo, user, refreshUser } = useAuth();
   const { data: settings, loading, refetch } = useApi('/settings');
   const [pat, setPat] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [email, setEmail] = useState('');
+  const [emailSaving, setEmailSaving] = useState(false);
+  const [emailSaved, setEmailSaved] = useState(false);
+  const [emailError, setEmailError] = useState(null);
+
+  useEffect(() => { setEmail(user?.email || ''); }, [user?.email]);
+
+  const handleSaveEmail = async () => {
+    setEmailSaving(true);
+    setEmailSaved(false);
+    setEmailError(null);
+    try {
+      await apiPut('/auth/me', { email: email.trim() || null });
+      await refreshUser();
+      setEmailSaved(true);
+      setTimeout(() => setEmailSaved(false), 3000);
+    } catch (err) {
+      setEmailError(err.message || 'Failed to save email');
+    } finally {
+      setEmailSaving(false);
+    }
+  };
 
   const handleSavePat = async () => {
     if (!pat.trim()) return;
@@ -42,6 +64,65 @@ export default function Settings() {
   return (
     <div className="max-w-2xl mx-auto">
       <h1 className="text-2xl font-bold text-white mb-6">Settings</h1>
+
+      {/* Account */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 mb-6">
+        <div className="flex items-center gap-3 mb-4">
+          <User className="w-5 h-5 text-indigo-400" />
+          <h2 className="text-lg font-semibold text-white">Your account</h2>
+        </div>
+        <p className="text-sm text-gray-400 mb-4">
+          You sign in as <span className="font-mono text-gray-300">{user?.username || '—'}</span>.
+          An email lets you raise bug reports and feature requests from the button in
+          the corner, and gives us somewhere to reply. It is not used for signing in
+          and never leaves this install except on a ticket you submit.
+        </p>
+
+        {/* Three states: username is already an address, an address has been
+            set explicitly, or there is nothing to attribute a ticket to. */}
+        {user && !user.email && user.ticket_email && (
+          <div className="flex gap-2.5 rounded-lg border border-gray-700 bg-gray-800/50 p-3 mb-4">
+            <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+            <p className="text-xs text-gray-400">
+              Your username is already an email address, so tickets are sent as{' '}
+              <span className="font-mono text-gray-300">{user.ticket_email}</span>. Set a
+              different one below if you&rsquo;d rather we replied elsewhere.
+            </p>
+          </div>
+        )}
+
+        {user && !user.ticket_email && (
+          <div className="flex gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 mb-4">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-200/80">
+              No email set — you can use Orqy as normal, but you won&rsquo;t be able to
+              submit tickets until you add one.
+            </p>
+          </div>
+        )}
+
+        <label className="block text-sm font-medium text-gray-300 mb-1">Email address</label>
+        <div className="flex gap-3">
+          <input
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSaveEmail()}
+            placeholder="you@example.com"
+            className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm"
+          />
+          <button
+            type="button"
+            onClick={handleSaveEmail}
+            disabled={emailSaving || email.trim() === (user?.email || '')}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 disabled:opacity-50 transition-colors text-sm font-medium"
+          >
+            {emailSaved ? <><Check className="w-4 h-4" /> Saved</> : emailSaving ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+        {emailError && <p className="mt-2 text-xs text-red-400">{emailError}</p>}
+      </div>
 
       {/* Global PAT */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">

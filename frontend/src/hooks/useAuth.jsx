@@ -5,6 +5,7 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => localStorage.getItem('orqy_token'));
   const [setupStatus, setSetupStatus] = useState(null);
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const checkSetup = useCallback(async () => {
@@ -20,6 +21,32 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => { checkSetup(); }, [checkSetup]);
+
+  // Who is signed in. Orqy accounts are username-based and the email is
+  // optional, so `user.email` may well be null for an existing deployment.
+  const refreshUser = useCallback(async () => {
+    if (!token) {
+      setUser(null);
+      return null;
+    }
+    try {
+      const res = await fetch('/api/auth/me', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        setUser(null);
+        return null;
+      }
+      const data = await res.json();
+      setUser(data);
+      return data;
+    } catch {
+      setUser(null);
+      return null;
+    }
+  }, [token]);
+
+  useEffect(() => { refreshUser(); }, [refreshUser]);
 
   const login = async (username, password) => {
     const res = await fetch('/api/auth/login', {
@@ -46,6 +73,7 @@ export function AuthProvider({ children }) {
       });
     } catch {}
     setToken(null);
+    setUser(null);
     localStorage.removeItem('orqy_token');
     document.cookie = 'orqy_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
   };
@@ -70,6 +98,8 @@ export function AuthProvider({ children }) {
 
   const value = {
     token,
+    user,
+    refreshUser,
     isAuthenticated: !!token,
     setupComplete: setupStatus?.setup_complete ?? false,
     systemInfo: setupStatus?.system ?? null,
