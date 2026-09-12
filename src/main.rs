@@ -41,6 +41,8 @@ async fn main() -> anyhow::Result<()> {
         .and_then(|p| p.parse().ok())
         .unwrap_or(3456);
 
+    auth::init_started_at();
+
     // Init database
     let pool = db::init_pool(&database_url).await?;
     tracing::info!("Database connected and migrations applied");

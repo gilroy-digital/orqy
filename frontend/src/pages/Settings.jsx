@@ -34,6 +34,41 @@ export default function Settings() {
     }
   };
 
+  const [updating, setUpdating] = useState(false);
+  const [updateError, setUpdateError] = useState(null);
+
+  const handleUpdate = async () => {
+    if (!confirm('Update Orqy to the latest version? The service will restart briefly.')) return;
+    setUpdateError(null);
+    try {
+      // The old server keeps answering while the new image builds, so "it
+      // responds" proves nothing. Wait for a server that started after this.
+      const before = await fetch('/api/setup/status').then((r) => r.json()).then((d) => d.started_at);
+      await apiPost('/settings/update', {});
+      setUpdating(true);
+      const deadline = Date.now() + 20 * 60 * 1000;
+      const poll = setInterval(async () => {
+        if (Date.now() > deadline) {
+          clearInterval(poll);
+          setUpdating(false);
+          setUpdateError('Orqy did not restart within 20 minutes. Check /tmp/orqy-update.log on the host.');
+          return;
+        }
+        try {
+          const res = await fetch('/api/setup/status');
+          if (!res.ok) return;
+          const { started_at } = await res.json();
+          if (started_at && started_at !== before) {
+            clearInterval(poll);
+            window.location.reload();
+          }
+        } catch {}
+      }, 3000);
+    } catch (err) {
+      setUpdateError('Update failed: ' + err.message);
+    }
+  };
+
   const handleSavePat = async () => {
     if (!pat.trim()) return;
     setSaving(true);
@@ -265,28 +300,19 @@ export default function Settings() {
         </p>
         <button
           type="button"
-          onClick={async () => {
-            if (!confirm('Update Orqy to the latest version? The service will restart briefly.')) return;
-            try {
-              await apiPost('/settings/update', {});
-              // Poll until the service comes back
-              const poll = setInterval(async () => {
-                try {
-                  const res = await fetch('/api/setup/status');
-                  if (res.ok) {
-                    clearInterval(poll);
-                    window.location.reload();
-                  }
-                } catch {}
-              }, 3000);
-            } catch (err) {
-              alert('Update failed: ' + err.message);
-            }
-          }}
-          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-colors text-sm font-medium"
+          onClick={handleUpdate}
+          disabled={updating}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 disabled:opacity-60 transition-colors text-sm font-medium"
         >
-          Check for Updates
+          {updating && <RefreshCw className="w-4 h-4 animate-spin" />}
+          {updating ? 'Updating…' : 'Check for Updates'}
         </button>
+        {updating && (
+          <p className="mt-3 text-xs text-gray-500">
+            Pulling and rebuilding — this usually takes a few minutes. The page reloads once the new version is running.
+          </p>
+        )}
+        {updateError && <p className="mt-3 text-xs text-red-400">{updateError}</p>}
       </div>
 
       {/* Factory Reset */}

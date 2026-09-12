@@ -518,18 +518,36 @@ pub async fn self_update(
         .unwrap_or_else(|| "/".to_string());
 
     // Use nsenter to run the update script directly on the host
-    // PID 1 is always the host's init process
+    // PID 1 is always the host's init process.
+    //
+    // The script ends by recreating this container, and anything still in the
+    // container's cgroup dies with it — nsenter changes namespaces, not
+    // cgroups, so a plain nohup'd child would be killed mid-recreate. Where
+    // the host has systemd, run it as a transient unit so it outlives us.
+    let run = format!(
+        "cd '{dir}' && if command -v systemd-run >/dev/null 2>&1; then \
+           systemd-run --quiet --collect --unit=orqy-update-$(date +%s) \
+             sh -c 'cd \"{dir}\" && exec bash update.sh > /tmp/orqy-update.log 2>&1'; \
+         else \
+           nohup bash update.sh > /tmp/orqy-update.log 2>&1 & \
+         fi",
+        dir = host_dir
+    );
     let result = Command::new("nsenter")
         .args([
             "--target", "1",
             "--mount", "--uts", "--ipc", "--net", "--pid",
-            "--", "sh", "-c",
-            &format!("cd '{}' && nohup sh update.sh > /tmp/orqy-update.log 2>&1 &", host_dir),
+            "--", "sh", "-c", &run,
         ])
         .output()
         .await;
 
     match result {
+        Ok(out) if !out.status.success() => {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            tracing::error!("Self-update failed to start: {}", stderr);
+            (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to start update: {}", stderr.trim())).into_response()
+        }
         Ok(_) => {
             tracing::info!("Self-update initiated from {}", script);
             Json(serde_json::json!({
