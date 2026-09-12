@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Request, State},
+    extract::{Extension, Request, State},
     http::{header, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
@@ -10,6 +10,13 @@ use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 
 use crate::db::repo;
+
+/// The signed-in user, attached to the request by `auth_middleware` and read
+/// back out by any handler that needs to know who is asking.
+#[derive(Debug, Clone)]
+pub struct CurrentUser {
+    pub username: String,
+}
 
 /// Check if setup has been completed (at least one user exists).
 pub async fn is_setup_complete(pool: &PgPool) -> bool {
@@ -180,7 +187,7 @@ pub async fn public_reset(
 
 pub async fn auth_middleware(
     State(state): State<crate::api::AppState>,
-    req: Request,
+    mut req: Request,
     next: Next,
 ) -> Response {
     // Skip auth if setup not complete
@@ -188,10 +195,12 @@ pub async fn auth_middleware(
         return next.run(req).await;
     }
 
-    // Check for valid session token
+    // Check for valid session token. The session value is the username, so a
+    // valid token also tells us who is making the request.
     if let Some(token) = extract_token(&req) {
         let key = format!("session:{}", token);
-        if let Ok(Some(_)) = repo::get_setting(&state.pool, &key).await {
+        if let Ok(Some(username)) = repo::get_setting(&state.pool, &key).await {
+            req.extensions_mut().insert(CurrentUser { username });
             return next.run(req).await;
         }
     }
@@ -220,6 +229,108 @@ fn extract_token(req: &Request) -> Option<String> {
         }
     }
     None
+}
+
+// ── Current user ──
+
+/// Loose sanity check, not RFC 5322. The ticket API is the real authority on
+/// whether an address is deliverable; this only catches the obvious mistake of
+/// typing a username into the email box.
+pub fn looks_like_email(value: &str) -> bool {
+    let value = value.trim();
+    let mut parts = value.splitn(2, '@');
+    let (local, domain) = match (parts.next(), parts.next()) {
+        (Some(l), Some(d)) => (l, d),
+        _ => return false,
+    };
+    !local.is_empty()
+        && domain.contains('.')
+        && !domain.starts_with('.')
+        && !domain.ends_with('.')
+        && !value.contains(char::is_whitespace)
+}
+
+/// The address stored against an account, if any.
+pub async fn stored_email(pool: &PgPool, username: &str) -> Option<String> {
+    sqlx::query_as::<_, (Option<String>,)>("SELECT email FROM users WHERE username = $1")
+        .bind(username)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|r| r.0)
+        .map(|e| e.trim().to_string())
+        .filter(|e| !e.is_empty())
+}
+
+/// The address a ticket raised by this account is attributed to.
+///
+/// Orqy signs in by username, but plenty of deployments already use an email
+/// address as the username. Where that is the case there is nothing to ask
+/// for — fall back to it rather than making the user retype it in Settings.
+/// An explicitly stored email always wins, so it can be overridden.
+pub fn resolve_reporter_email(username: &str, stored: Option<String>) -> Option<String> {
+    match stored {
+        Some(e) => Some(e),
+        None if looks_like_email(username) => Some(username.trim().to_string()),
+        None => None,
+    }
+}
+
+pub async fn get_me(
+    State(state): State<crate::api::AppState>,
+    user: Option<Extension<CurrentUser>>,
+) -> impl IntoResponse {
+    let username = match user {
+        Some(Extension(u)) => u.username,
+        None => return (StatusCode::UNAUTHORIZED, "Not signed in").into_response(),
+    };
+
+    let email = stored_email(&state.pool, &username).await;
+    let reporter = resolve_reporter_email(&username, email.clone());
+
+    Json(serde_json::json!({
+        "username": username,
+        // What Settings edits: null unless one has been explicitly stored.
+        "email": email,
+        // What tickets are actually sent as — may be the username itself.
+        "ticket_email": reporter,
+    })).into_response()
+}
+
+#[derive(Deserialize)]
+pub struct UpdateMeRequest {
+    /// `null` or empty clears the stored address.
+    pub email: Option<String>,
+}
+
+pub async fn update_me(
+    State(state): State<crate::api::AppState>,
+    user: Option<Extension<CurrentUser>>,
+    Json(input): Json<UpdateMeRequest>,
+) -> Response {
+    let username = match user {
+        Some(Extension(u)) => u.username,
+        None => return (StatusCode::UNAUTHORIZED, "Not signed in").into_response(),
+    };
+
+    let email = match input.email.as_deref().map(str::trim) {
+        None | Some("") => None,
+        Some(e) if looks_like_email(e) => Some(e.to_string()),
+        Some(_) => {
+            return (StatusCode::BAD_REQUEST, "That does not look like an email address").into_response()
+        }
+    };
+
+    match sqlx::query("UPDATE users SET email = $1 WHERE username = $2")
+        .bind(&email)
+        .bind(&username)
+        .execute(&state.pool)
+        .await
+    {
+        Ok(_) => Json(serde_json::json!({ "username": username, "email": email })).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
 }
 
 // ── System detection ──

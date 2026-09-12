@@ -5,9 +5,11 @@ mod db;
 mod deploy;
 pub mod hostpath;
 mod polling;
+mod tickets;
 mod webhook;
 
 use axum::{
+    extract::DefaultBodyLimit,
     middleware,
     routing::{get, post},
     Router,
@@ -75,6 +77,13 @@ async fn main() -> anyhow::Result<()> {
 
     // Protected routes (auth required)
     let protected_api = Router::new()
+        // Current user
+        .route("/auth/me", get(auth::get_me).put(auth::update_me))
+        // Support tickets
+        .route(
+            "/tickets",
+            post(tickets::create_ticket).layer(DefaultBodyLimit::max(tickets::BODY_LIMIT)),
+        )
         // Projects
         .route("/projects", get(api::routes::list_projects).post(api::routes::create_project))
         .route("/projects/:id", get(api::routes::get_project).put(api::routes::update_project).delete(api::routes::delete_project))

@@ -67,6 +67,26 @@ http://your-server:3456/api/webhook/<project-id>
 
 In GitHub: Settings > Webhooks > Add webhook > Paste URL > Content type: `application/json`
 
+## Reporting Bugs & Feature Requests
+
+The button in the bottom-right corner of every page raises a bug report or
+feature request against the Orqy backlog. Reports are sent through the backend
+rather than from the browser, so the reporter address always comes from the
+signed-in account and never from the form — you can only ever raise a ticket
+as yourself.
+
+Orqy signs in by username. Where that username is already an email address it
+is used as-is; where it isn't, the panel warns and blocks submission until an
+address is set under **Settings > Your account**. Everything else in Orqy keeps
+working either way — the email is only ever used for tickets.
+
+Up to 5 files can be attached (10 MB each, 25 MB total; png, jpg, gif, webp,
+pdf, txt, log, csv, json, har), and a screenshot on the clipboard can be pasted
+straight into the Details box.
+
+Each report also carries the Orqy version, host OS/arch, and the page it came
+from, which is stored against the ticket for triage.
+
 ## Deploy Flow
 
 When a change is detected (poll or webhook):
@@ -86,14 +106,33 @@ All output is captured, stored, and streamed live via WebSocket.
 | `HOST_MOUNT` | `/` | Host root to mount (default: entire filesystem at `/host` inside container) |
 | `PORT` | `3456` | HTTP server port |
 | `RUST_LOG` | `orqy=info` | Log level |
+| `TICKET_API_URL` | Gilroy.digital public ticket API | Where the ticket button posts |
+| `TICKET_BUSINESS_REF` | Orqy's business ref | Which ticket queue reports land in |
 
 ## Development
 
 ```bash
-# Backend
+./run-dev.sh          # dev Postgres + backend + frontend
+./run-dev.sh --stop   # tear the dev database down
+```
+
+Then open <http://localhost:3458>. Dev runs on its own ports so it never
+collides with a production Orqy on 3456:
+
+| Port | Role |
+|---|---|
+| 3458 | Frontend (Vite, proxies `/api` and the log WebSocket to the backend) |
+| 3457 | Backend (`cargo run`) |
+| 5443 | Postgres (`orqy_dev_db`, separate volume from production) |
+
+Configuration lives in `.env` (copied from `.env.example` on first run).
+To run the pieces by hand instead:
+
+```bash
+docker compose -f docker-compose.dev.yml up -d
 cargo run
 
-# Frontend (separate terminal)
+# separate terminal
 cd frontend && npm install && npm run dev
 ```
 
