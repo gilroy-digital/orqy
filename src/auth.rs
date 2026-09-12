@@ -51,6 +51,16 @@ pub struct SetupRequest {
     pub host_os: Option<String>, // "mac", "windows", "linux"
 }
 
+/// When this process started. The Update button compares it before and after
+/// to tell a restarted Orqy from the old one that is still serving while the
+/// new image builds.
+static STARTED_AT: std::sync::LazyLock<String> =
+    std::sync::LazyLock::new(|| chrono::Utc::now().to_rfc3339());
+
+pub fn init_started_at() {
+    std::sync::LazyLock::force(&STARTED_AT);
+}
+
 pub async fn get_setup_status(
     State(state): State<crate::api::AppState>,
 ) -> impl IntoResponse {
@@ -60,6 +70,7 @@ pub async fn get_setup_status(
 
     Json(serde_json::json!({
         "setup_complete": setup_complete,
+        "started_at": *STARTED_AT,
         "system": {
             "detected_os": saved_os.unwrap_or_else(|| "unknown".to_string()),
             "arch": arch,
