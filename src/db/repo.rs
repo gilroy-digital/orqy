@@ -23,8 +23,8 @@ pub async fn create_project(pool: &PgPool, input: &CreateProject, pat_encrypted:
     let project = sqlx::query_as::<_, Project>(
         r#"
         INSERT INTO projects (name, repo_url, branch, local_path, compose_file, service_name,
-                              pat_encrypted, poll_interval_secs, polling_enabled, webhook_secret, auto_deploy, compose_args, notify_url, build_timeout_secs)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                              pat_encrypted, poll_interval_secs, polling_enabled, webhook_secret, auto_deploy, compose_args, notify_url, build_timeout_secs, bucket_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         RETURNING *
         "#,
     )
@@ -42,6 +42,7 @@ pub async fn create_project(pool: &PgPool, input: &CreateProject, pat_encrypted:
     .bind(&input.compose_args)
     .bind(&input.notify_url)
     .bind(input.build_timeout_secs.unwrap_or(600))
+    .bind(input.bucket_id)
     .fetch_one(pool)
     .await?;
     Ok(project)
@@ -65,7 +66,8 @@ pub async fn update_project(
             name = $2, repo_url = $3, branch = $4, local_path = $5,
             compose_file = $6, service_name = $7, pat_encrypted = $8,
             poll_interval_secs = $9, polling_enabled = $10, webhook_secret = $11,
-            auto_deploy = $12, compose_args = $13, notify_url = $14, build_timeout_secs = $15, updated_at = NOW()
+            auto_deploy = $12, compose_args = $13, notify_url = $14, build_timeout_secs = $15,
+            bucket_id = $16, updated_at = NOW()
         WHERE id = $1
         RETURNING *
         "#,
@@ -85,6 +87,8 @@ pub async fn update_project(
     .bind(input.compose_args.as_ref().or(existing.compose_args.as_ref()))
     .bind(input.notify_url.as_ref().or(existing.notify_url.as_ref()))
     .bind(input.build_timeout_secs.unwrap_or(existing.build_timeout_secs))
+    // Absent leaves it where it is; an explicit null empties it out.
+    .bind(input.bucket_id.unwrap_or(existing.bucket_id))
     .fetch_one(pool)
     .await?;
     Ok(Some(project))
@@ -92,6 +96,46 @@ pub async fn update_project(
 
 pub async fn delete_project(pool: &PgPool, id: Uuid) -> anyhow::Result<bool> {
     let result = sqlx::query("DELETE FROM projects WHERE id = $1")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(result.rows_affected() > 0)
+}
+
+// ── Buckets ──
+
+pub async fn list_buckets(pool: &PgPool) -> anyhow::Result<Vec<Bucket>> {
+    let buckets = sqlx::query_as::<_, Bucket>("SELECT * FROM buckets ORDER BY name")
+        .fetch_all(pool)
+        .await?;
+    Ok(buckets)
+}
+
+pub async fn create_bucket(pool: &PgPool, name: &str) -> anyhow::Result<Bucket> {
+    let bucket = sqlx::query_as::<_, Bucket>(
+        "INSERT INTO buckets (name) VALUES ($1) RETURNING *",
+    )
+    .bind(name)
+    .fetch_one(pool)
+    .await?;
+    Ok(bucket)
+}
+
+pub async fn rename_bucket(pool: &PgPool, id: Uuid, name: &str) -> anyhow::Result<Option<Bucket>> {
+    let bucket = sqlx::query_as::<_, Bucket>(
+        "UPDATE buckets SET name = $2 WHERE id = $1 RETURNING *",
+    )
+    .bind(id)
+    .bind(name)
+    .fetch_optional(pool)
+    .await?;
+    Ok(bucket)
+}
+
+/// The projects filed under it are not deleted — the column is ON DELETE SET
+/// NULL, so they simply become ungrouped.
+pub async fn delete_bucket(pool: &PgPool, id: Uuid) -> anyhow::Result<bool> {
+    let result = sqlx::query("DELETE FROM buckets WHERE id = $1")
         .bind(id)
         .execute(pool)
         .await?;

@@ -10,6 +10,8 @@ export default function EditProject() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { data: project, loading: loadingProject } = useApi(`/projects/${id}`);
+  const { data: bucketData } = useApi('/buckets');
+  const buckets = bucketData || [];
 
   const [form, setForm] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -43,6 +45,7 @@ export default function EditProject() {
         compose_args: project.compose_args || '',
         notify_url: project.notify_url || '',
         build_timeout_secs: project.build_timeout_secs || 600,
+        bucket_id: project.bucket_id || '',
       });
       fetchBranches(project.repo_url, '');
       fetchContainers(project.local_path, project.compose_file);
@@ -126,6 +129,9 @@ export default function EditProject() {
       payload.notify_url = payload.notify_url || null;
       payload.build_timeout_secs = parseInt(payload.build_timeout_secs);
       payload.poll_interval_secs = parseInt(payload.poll_interval_secs);
+      // Explicitly null rather than dropped: the backend reads an absent
+      // bucket_id as "leave it where it is", and this form is a decision.
+      payload.bucket_id = payload.bucket_id || null;
 
       await apiPut(`/projects/${id}`, payload);
       navigate(`/projects/${id}`);
@@ -151,6 +157,16 @@ export default function EditProject() {
       )}
 
       <div className="space-y-5">
+        <div>
+          <label className={labelClass}>Bucket</label>
+          <select className={inputClass} value={form.bucket_id || ''} onChange={update('bucket_id')}>
+            <option value="">Ungrouped</option>
+            {buckets.map((b) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-gray-500">Groups this project on the dashboard.</p>
+        </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className={labelClass}>Project Name *</label>
