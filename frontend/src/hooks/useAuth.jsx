@@ -7,14 +7,24 @@ export function AuthProvider({ children }) {
   const [setupStatus, setSetupStatus] = useState(null);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [setupError, setSetupError] = useState(null);
 
   const checkSetup = useCallback(async () => {
+    setSetupError(null);
     try {
-      const res = await fetch('/api/setup/status');
-      const data = await res.json();
-      setSetupStatus(data);
-    } catch {
+      // Timed out deliberately. A request that hangs — a sleeping laptop, a
+      // host that answers the connection and nothing else — used to leave the
+      // app on "Loading..." indefinitely, with nothing to cancel it and
+      // nothing said. And a backend that can't be reached is not the same as
+      // one reporting no setup, which is why the failure is kept: without it
+      // an unreachable Orqy shows the first-run wizard, as though every
+      // project were gone.
+      const res = await fetch('/api/setup/status', { signal: AbortSignal.timeout(10000) });
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      setSetupStatus(await res.json());
+    } catch (e) {
       setSetupStatus(null);
+      setSetupError(e?.name === 'TimeoutError' ? 'No reply within 10 seconds.' : e?.message || 'Could not reach Orqy.');
     } finally {
       setLoading(false);
     }
@@ -98,6 +108,8 @@ export function AuthProvider({ children }) {
 
   const value = {
     token,
+    setupError,
+    retrySetup: checkSetup,
     user,
     refreshUser,
     isAuthenticated: !!token,
