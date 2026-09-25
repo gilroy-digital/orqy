@@ -4,7 +4,8 @@ import { useApi, apiPost, apiDelete } from '../hooks/useApi';
 import StatusBadge from '../components/StatusBadge';
 import UnmanagedContainers from '../components/UnmanagedContainers';
 import { BucketHeading, NewBucketButton } from '../components/BucketBar';
-import { GitBranch, Clock, Rocket, RefreshCw, Trash2, Square, Play, RotateCw, ChevronDown, ChevronRight } from 'lucide-react';
+import EditProjectModal from '../components/EditProjectModal';
+import { GitBranch, Clock, Rocket, RefreshCw, Trash2, Square, Play, RotateCw, ChevronDown, ChevronRight, Pencil } from 'lucide-react';
 
 export default function Dashboard() {
   const { data: projects, loading, error, refetch } = useApi('/projects', [], { pollInterval: 5000 });
@@ -26,6 +27,9 @@ export default function Dashboard() {
   // Which buckets are folded away. Kept in the browser rather than the
   // database: it is how one person likes to look at the page, not something
   // true of the bucket, and it should not follow them onto another machine.
+  // Which project the edit dialog is open for, if any.
+  const [editingId, setEditingId] = useState(null);
+
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return new Set(JSON.parse(localStorage.getItem('orqy_collapsed_buckets') || '[]'));
@@ -115,6 +119,17 @@ export default function Dashboard() {
         </h3>
         <div className="flex items-center gap-2">
           {project.last_deploy && <StatusBadge status={project.last_deploy.status} />}
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setEditingId(project.id);
+            }}
+            className="p-1 text-gray-600 hover:text-indigo-400 rounded transition-colors opacity-0 group-hover:opacity-100"
+            title={`Edit ${project.name}`}
+          >
+            <Pencil className="w-4 h-4" />
+          </button>
           <button
             onClick={(e) => handleDelete(e, project.id, project.name)}
             className="p-1 text-gray-600 hover:text-red-400 rounded transition-colors opacity-0 group-hover:opacity-100"
@@ -248,6 +263,13 @@ export default function Dashboard() {
       )}
 
       <UnmanagedContainers />
+
+      <EditProjectModal
+        open={!!editingId}
+        projectId={editingId}
+        onClose={() => setEditingId(null)}
+        onSaved={reload}
+      />
     </div>
   );
 }

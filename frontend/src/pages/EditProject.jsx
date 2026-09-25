@@ -6,8 +6,11 @@ import PathPicker from '../components/PathPicker';
 const inputClass = 'w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm';
 const labelClass = 'block text-sm font-medium text-gray-300 mb-1';
 
-export default function EditProject({ embedded = false, onDone }) {
-  const { id } = useParams();
+export default function EditProject({ embedded = false, onDone, projectId }) {
+  // From the route on /projects/:id/edit; passed in when the form is shown in
+  // a dialog somewhere with no project in the URL, such as the dashboard.
+  const { id: routeId } = useParams();
+  const id = projectId || routeId;
   const navigate = useNavigate();
   const { data: project, loading: loadingProject } = useApi(`/projects/${id}`);
   const { data: bucketData } = useApi('/buckets');
