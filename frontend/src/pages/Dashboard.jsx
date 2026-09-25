@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useApi, apiPost, apiDelete } from '../hooks/useApi';
 import StatusBadge from '../components/StatusBadge';
+import UnmanagedContainers from '../components/UnmanagedContainers';
 import { GitBranch, Clock, Rocket, RefreshCw, Trash2, Square, Play, RotateCw } from 'lucide-react';
 
 export default function Dashboard() {
@@ -55,6 +56,9 @@ export default function Dashboard() {
         >
           Add Project
         </Link>
+        <div className="max-w-3xl mx-auto text-left">
+          <UnmanagedContainers />
+        </div>
       </div>
     );
   }
@@ -149,6 +153,8 @@ export default function Dashboard() {
           </Link>
         ))}
       </div>
+
+      <UnmanagedContainers />
     </div>
   );
 }

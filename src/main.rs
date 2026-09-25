@@ -112,6 +112,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/branches", get(api::routes::list_branches))
         // Docker containers
         .route("/containers", get(api::routes::list_containers))
+        // What's running here that Orqy doesn't manage
+        .route("/containers/scan", get(api::routes::scan_containers))
         // Repo check & clone
         .route("/check-repo", get(api::routes::check_repo))
         .route("/container-status", get(api::routes::container_status))
