@@ -4,6 +4,7 @@ import { useApi, apiPost, apiDelete } from '../hooks/useApi';
 import { useDeployLogs } from '../hooks/useDeployLogs';
 import StatusBadge from '../components/StatusBadge';
 import LogViewer from '../components/LogViewer';
+import EditProjectModal from '../components/EditProjectModal';
 import { Play, Trash2, GitBranch, Clock, ArrowLeft, Copy, ExternalLink, Pencil, XCircle } from 'lucide-react';
 
 export default function ProjectDetail() {
@@ -13,6 +14,7 @@ export default function ProjectDetail() {
   const { data: deploys, loading: loadingDeploys, refetch: refetchDeploys } = useApi(`/projects/${id}/deploys`, [], { pollInterval: 5000 });
   const [selectedDeploy, setSelectedDeploy] = useState(null);
   const [deploying, setDeploying] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   // Live logs for the selected deploy
   const { logs: liveLogs, connected } = useDeployLogs(
@@ -100,7 +102,7 @@ export default function ProjectDetail() {
             {deploying ? 'Deploying...' : 'Deploy Now'}
           </button>
           <button
-            onClick={() => navigate(`/projects/${id}/edit`)}
+            onClick={() => setEditing(true)}
             className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-gray-800 transition-colors"
             title="Edit project"
           >
@@ -231,6 +233,12 @@ export default function ProjectDetail() {
           )}
         </div>
       </div>
+
+      <EditProjectModal
+        open={editing}
+        onClose={() => setEditing(false)}
+        onSaved={refetchProject}
+      />
     </div>
   );
 }

@@ -1,9 +1,10 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApi, apiPost, apiDelete } from '../hooks/useApi';
 import StatusBadge from '../components/StatusBadge';
 import UnmanagedContainers from '../components/UnmanagedContainers';
 import { BucketHeading, NewBucketButton } from '../components/BucketBar';
-import { GitBranch, Clock, Rocket, RefreshCw, Trash2, Square, Play, RotateCw } from 'lucide-react';
+import { GitBranch, Clock, Rocket, RefreshCw, Trash2, Square, Play, RotateCw, ChevronDown, ChevronRight } from 'lucide-react';
 
 export default function Dashboard() {
   const { data: projects, loading, error, refetch } = useApi('/projects', [], { pollInterval: 5000 });
@@ -20,6 +21,31 @@ export default function Dashboard() {
   const reload = () => {
     refetchBuckets();
     refetch();
+  };
+
+  // Which buckets are folded away. Kept in the browser rather than the
+  // database: it is how one person likes to look at the page, not something
+  // true of the bucket, and it should not follow them onto another machine.
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem('orqy_collapsed_buckets') || '[]'));
+    } catch {
+      return new Set();
+    }
+  });
+
+  const toggle = (key) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(key)) next.add(key);
+      try {
+        localStorage.setItem('orqy_collapsed_buckets', JSON.stringify([...next]));
+      } catch {
+        // Private window, or storage turned off. Folding still works for
+        // this visit; it just won't be remembered.
+      }
+      return next;
+    });
   };
 
   const handleContainerAction = async (projectId, action) => {
@@ -179,8 +205,14 @@ export default function Dashboard() {
             const items = projects.filter((p) => p.bucket_id === bucket.id);
             return (
               <section key={bucket.id}>
-                <BucketHeading bucket={bucket} count={items.length} onChanged={reload} />
-                {items.length > 0 ? (
+                <BucketHeading
+                  bucket={bucket}
+                  count={items.length}
+                  collapsed={collapsed.has(bucket.id)}
+                  onToggle={() => toggle(bucket.id)}
+                  onChanged={reload}
+                />
+                {collapsed.has(bucket.id) ? null : items.length > 0 ? (
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{items.map(card)}</div>
                 ) : (
                   <p className="text-xs text-gray-600">
@@ -193,11 +225,23 @@ export default function Dashboard() {
 
           {ungrouped.length > 0 && (
             <section>
-              <div className="flex items-center gap-2 mb-3">
-                <h2 className="text-sm font-semibold text-gray-300">Ungrouped</h2>
+              <button
+                type="button"
+                onClick={() => toggle('ungrouped')}
+                title={collapsed.has('ungrouped') ? 'Show ungrouped' : 'Hide ungrouped'}
+                className="flex items-center gap-2 mb-3"
+              >
+                {collapsed.has('ungrouped') ? (
+                  <ChevronRight className="w-4 h-4 text-gray-600" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-gray-600" />
+                )}
+                <h2 className="text-sm font-semibold text-gray-300 hover:text-white transition-colors">Ungrouped</h2>
                 <span className="text-xs text-gray-600">{ungrouped.length}</span>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{ungrouped.map(card)}</div>
+              </button>
+              {!collapsed.has('ungrouped') && (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{ungrouped.map(card)}</div>
+              )}
             </section>
           )}
         </div>

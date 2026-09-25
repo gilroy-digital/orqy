@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FolderPlus, Pencil, Trash2, Check, X } from 'lucide-react';
+import { FolderPlus, Pencil, Trash2, Check, X, ChevronDown, ChevronRight } from 'lucide-react';
 import { apiPost, apiPut, apiDelete } from '../hooks/useApi';
 
 /**
@@ -7,7 +7,7 @@ import { apiPost, apiPut, apiDelete } from '../hooks/useApi';
  * ones. Renaming and deleting live here rather than in Settings because this
  * is where buckets are actually looked at.
  */
-export function BucketHeading({ bucket, count, onChanged }) {
+export function BucketHeading({ bucket, count, collapsed, onToggle, onChanged }) {
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(bucket.name);
   const [error, setError] = useState(null);
@@ -71,8 +71,20 @@ export function BucketHeading({ bucket, count, onChanged }) {
         </>
       ) : (
         <>
-          <h2 className="text-sm font-semibold text-gray-300">{bucket.name}</h2>
-          <span className="text-xs text-gray-600">{count}</span>
+          <button
+            type="button"
+            onClick={onToggle}
+            title={collapsed ? `Show ${bucket.name}` : `Hide ${bucket.name}`}
+            className="flex items-center gap-2 text-left"
+          >
+            {collapsed ? (
+              <ChevronRight className="w-4 h-4 text-gray-600" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-gray-600" />
+            )}
+            <h2 className="text-sm font-semibold text-gray-300 hover:text-white transition-colors">{bucket.name}</h2>
+            <span className="text-xs text-gray-600">{count}</span>
+          </button>
           <button
             type="button"
             onClick={() => setRenaming(true)}
