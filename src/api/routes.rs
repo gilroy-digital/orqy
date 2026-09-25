@@ -257,6 +257,7 @@ pub async fn list_projects(State(state): State<AppState>) -> impl IntoResponse {
                     compose_args: p.compose_args,
                     notify_url: p.notify_url,
                     build_timeout_secs: p.build_timeout_secs,
+                    bucket_id: p.bucket_id,
                     last_deploy,
                 });
             }
@@ -289,6 +290,7 @@ pub async fn get_project(
                 compose_args: p.compose_args,
                 notify_url: p.notify_url,
                 build_timeout_secs: p.build_timeout_secs,
+                bucket_id: p.bucket_id,
                 last_deploy,
             }).into_response()
         }
@@ -1055,4 +1057,72 @@ async fn git_remote(host_dir: &str) -> Option<String> {
     }
     let url = String::from_utf8_lossy(&out.stdout).trim().to_string();
     if url.is_empty() { None } else { Some(ssh_to_https(&url)) }
+}
+
+// ── Buckets ──
+//
+// A bucket is a folder for projects, nothing more: a project is in one or in
+// none. Deleting a bucket is deliberately harmless — the column is ON DELETE
+// SET NULL, so the projects filed under it simply become ungrouped again.
+
+pub async fn list_buckets(State(state): State<AppState>) -> impl IntoResponse {
+    match repo::list_buckets(&state.pool).await {
+        Ok(buckets) => Json(buckets).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+pub async fn create_bucket(
+    State(state): State<AppState>,
+    Json(input): Json<BucketInput>,
+) -> impl IntoResponse {
+    let name = input.name.trim();
+    if name.is_empty() {
+        return (StatusCode::BAD_REQUEST, "A name is required").into_response();
+    }
+    match repo::create_bucket(&state.pool, name).await {
+        Ok(bucket) => (StatusCode::CREATED, Json(bucket)).into_response(),
+        // The name is UNIQUE, so a repeat is a conflict rather than a failure
+        // worth showing a stack trace for.
+        Err(e) if is_unique_violation(&e) => {
+            (StatusCode::CONFLICT, format!("There is already a bucket called \"{}\"", name)).into_response()
+        }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+pub async fn update_bucket(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(input): Json<BucketInput>,
+) -> impl IntoResponse {
+    let name = input.name.trim();
+    if name.is_empty() {
+        return (StatusCode::BAD_REQUEST, "A name is required").into_response();
+    }
+    match repo::rename_bucket(&state.pool, id, name).await {
+        Ok(Some(bucket)) => Json(bucket).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(e) if is_unique_violation(&e) => {
+            (StatusCode::CONFLICT, format!("There is already a bucket called \"{}\"", name)).into_response()
+        }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+pub async fn delete_bucket(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> impl IntoResponse {
+    match repo::delete_bucket(&state.pool, id).await {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => StatusCode::NOT_FOUND.into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+fn is_unique_violation(e: &anyhow::Error) -> bool {
+    e.downcast_ref::<sqlx::Error>()
+        .and_then(|e| e.as_database_error())
+        .is_some_and(|e| e.code().as_deref() == Some("23505"))
 }

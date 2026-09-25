@@ -19,12 +19,38 @@ pub struct Project {
     pub compose_args: Option<String>,
     pub notify_url: Option<String>,
     pub build_timeout_secs: i32,
+    /// The bucket this project is filed under; None is ungrouped.
+    pub bucket_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct Bucket {
+    pub id: Uuid,
+    pub name: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BucketInput {
+    pub name: String,
+}
+
+/// Tells "field absent" from "field set to null", which a plain Option can't:
+/// absent leaves the bucket alone, null moves the project out of one.
+fn double_option<'de, D, T>(de: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Deserialize::deserialize(de).map(Some)
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CreateProject {
+    #[serde(default)]
+    pub bucket_id: Option<Uuid>,
     pub name: String,
     pub repo_url: String,
     pub branch: Option<String>,
@@ -43,6 +69,8 @@ pub struct CreateProject {
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateProject {
+    #[serde(default, deserialize_with = "double_option")]
+    pub bucket_id: Option<Option<Uuid>>,
     pub name: Option<String>,
     pub repo_url: Option<String>,
     pub branch: Option<String>,
@@ -106,5 +134,6 @@ pub struct ProjectSummary {
     pub compose_args: Option<String>,
     pub notify_url: Option<String>,
     pub build_timeout_secs: i32,
+    pub bucket_id: Option<Uuid>,
     pub last_deploy: Option<Deploy>,
 }

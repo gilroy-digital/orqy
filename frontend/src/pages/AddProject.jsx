@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { apiPost } from '../hooks/useApi';
+import { useApi, apiPost } from '../hooks/useApi';
 import PathPicker from '../components/PathPicker';
 
 const inputClass = 'w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm';
@@ -16,6 +16,8 @@ export default function AddProject() {
   // compose file and origin already known. Everything stays editable — these
   // are what the running containers say about themselves, not a decision.
   const [params] = useSearchParams();
+  const { data: bucketData } = useApi('/buckets');
+  const buckets = bucketData || [];
 
   // Step tracking
   const [repoValidated, setRepoValidated] = useState(false);
@@ -28,6 +30,7 @@ export default function AddProject() {
     branch: 'staging',
     local_path: params.get('local_path') || '',
     compose_file: params.get('compose_file') || 'docker-compose.yml',
+    bucket_id: '',
     service_name: '',
     pat: '',
     poll_interval_secs: 60,
@@ -213,6 +216,7 @@ export default function AddProject() {
         notify_url: form.notify_url || null,
         build_timeout_secs: parseInt(form.build_timeout_secs),
         poll_interval_secs: parseInt(form.poll_interval_secs),
+        bucket_id: form.bucket_id || null,
       };
       const project = await apiPost('/projects', payload);
       navigate(`/projects/${project.id}`);
@@ -303,6 +307,17 @@ export default function AddProject() {
                     </select>
                   </div>
                 </div>
+                <div>
+                  <label className={labelClass}>Bucket</label>
+                  <select className={inputClass} value={form.bucket_id || ''} onChange={update('bucket_id')}>
+                    <option value="">Ungrouped</option>
+                    {buckets.map((b) => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500">Groups this project on the dashboard.</p>
+                </div>
+
               </div>
             )}
           </div>

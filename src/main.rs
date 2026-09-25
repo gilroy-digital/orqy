@@ -11,7 +11,7 @@ mod webhook;
 use axum::{
     extract::DefaultBodyLimit,
     middleware,
-    routing::{get, post},
+    routing::{get, post, put},
     Router,
 };
 use tower_http::cors::CorsLayer;
@@ -86,6 +86,9 @@ async fn main() -> anyhow::Result<()> {
             "/tickets",
             post(tickets::create_ticket).layer(DefaultBodyLimit::max(tickets::BODY_LIMIT)),
         )
+        // Buckets — folders for projects
+        .route("/buckets", get(api::routes::list_buckets).post(api::routes::create_bucket))
+        .route("/buckets/:id", put(api::routes::update_bucket).delete(api::routes::delete_bucket))
         // Projects
         .route("/projects", get(api::routes::list_projects).post(api::routes::create_project))
         .route("/projects/:id", get(api::routes::get_project).put(api::routes::update_project).delete(api::routes::delete_project))
