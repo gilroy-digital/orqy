@@ -6,7 +6,7 @@ import PathPicker from '../components/PathPicker';
 const inputClass = 'w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm';
 const labelClass = 'block text-sm font-medium text-gray-300 mb-1';
 
-export default function EditProject() {
+export default function EditProject({ embedded = false, onDone }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const { data: project, loading: loadingProject } = useApi(`/projects/${id}`);
@@ -134,7 +134,8 @@ export default function EditProject() {
       payload.bucket_id = payload.bucket_id || null;
 
       await apiPut(`/projects/${id}`, payload);
-      navigate(`/projects/${id}`);
+      if (embedded) onDone?.();
+      else navigate(`/projects/${id}`);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -147,8 +148,8 @@ export default function EditProject() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold text-white mb-6">Edit Project</h1>
+    <div className={embedded ? '' : 'max-w-2xl mx-auto'}>
+      {!embedded && <h1 className="text-2xl font-bold text-white mb-6">Edit Project</h1>}
 
       {error && (
         <div className="bg-red-400/10 border border-red-400/20 rounded-lg p-3 text-red-400 text-sm mb-4">
@@ -306,7 +307,7 @@ export default function EditProject() {
           </button>
           <button
             type="button"
-            onClick={() => navigate(`/projects/${id}`)}
+            onClick={() => (embedded ? onDone?.() : navigate(`/projects/${id}`))}
             className="px-5 py-2 bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors text-sm"
           >
             Cancel
