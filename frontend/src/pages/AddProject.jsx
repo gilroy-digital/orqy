@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiPost } from '../hooks/useApi';
 import PathPicker from '../components/PathPicker';
 
@@ -12,17 +12,22 @@ const sectionClass = 'bg-gray-900 border border-gray-800 rounded-xl p-5';
 export default function AddProject() {
   const navigate = useNavigate();
 
+  // Arriving from the "not in Orqy" scan on the dashboard, with the directory,
+  // compose file and origin already known. Everything stays editable — these
+  // are what the running containers say about themselves, not a decision.
+  const [params] = useSearchParams();
+
   // Step tracking
   const [repoValidated, setRepoValidated] = useState(false);
   const [pathValidated, setPathValidated] = useState(false);
 
   // Form state
   const [form, setForm] = useState({
-    name: '',
-    repo_url: '',
+    name: params.get('name') || '',
+    repo_url: params.get('repo_url') || '',
     branch: 'staging',
-    local_path: '',
-    compose_file: 'docker-compose.yml',
+    local_path: params.get('local_path') || '',
+    compose_file: params.get('compose_file') || 'docker-compose.yml',
     service_name: '',
     pat: '',
     poll_interval_secs: 60,

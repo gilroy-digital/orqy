@@ -873,3 +873,186 @@ pub async fn list_branches(
 
     Json(serde_json::json!({ "branches": branches })).into_response()
 }
+
+// ── Unmanaged containers ──
+//
+// What is running on this host that Orqy doesn't know about. Compose writes
+// the project name and its directory onto every container it starts, so a
+// running stack can be matched against the projects table without guessing:
+// anything left over is something Orqy could be deploying but isn't.
+
+#[derive(serde::Serialize)]
+pub struct ScannedContainer {
+    pub name: String,
+    pub image: String,
+    pub status: String,
+    pub service: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+pub struct UnmanagedGroup {
+    /// The compose project, or None for a container started outside compose.
+    pub compose_project: Option<String>,
+    pub working_dir: Option<String>,
+    pub compose_file: Option<String>,
+    /// origin of the git checkout in working_dir, when there is one — enough
+    /// to fill in the Add Project form rather than making the user find it.
+    pub repo_url: Option<String>,
+    pub suggested_name: String,
+    pub containers: Vec<ScannedContainer>,
+}
+
+/// Compose's own default: the project name is the directory's name. Matching
+/// on the directory is what actually settles it, but a stack started from a
+/// path Orqy records differently (a symlink, a since-moved checkout) still
+/// matches by name, which is better than offering to add it twice.
+fn dir_name(path: &str) -> String {
+    std::path::Path::new(path.trim_end_matches('/'))
+        .file_name()
+        .map(|s| s.to_string_lossy().to_lowercase())
+        .unwrap_or_default()
+}
+
+fn trim_path(path: &str) -> String {
+    let trimmed = path.trim_end_matches('/');
+    if trimmed.is_empty() { "/".to_string() } else { trimmed.to_string() }
+}
+
+/// `docker inspect` renders a missing label as this, not as an empty string.
+fn label(value: &str) -> Option<String> {
+    match value.trim() {
+        "" | "<no value>" => None,
+        v => Some(v.to_string()),
+    }
+}
+
+pub async fn scan_containers(State(state): State<AppState>) -> axum::response::Response {
+    let ids = match Command::new("docker").args(["ps", "-q"]).output().await {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout)
+            .lines()
+            .map(str::to_string)
+            .filter(|l| !l.is_empty())
+            .collect::<Vec<_>>(),
+        Ok(o) => {
+            let stderr = String::from_utf8_lossy(&o.stderr).trim().to_string();
+            return (StatusCode::INTERNAL_SERVER_ERROR, format!("Docker error: {}", stderr)).into_response();
+        }
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to run docker: {}", e)).into_response(),
+    };
+
+    if ids.is_empty() {
+        return Json(serde_json::json!({ "groups": [], "running": 0 })).into_response();
+    }
+
+    // Tab-separated and inspected by id rather than parsed out of `docker ps`,
+    // whose Labels column is comma-joined and so ambiguous the moment a label
+    // value contains a comma.
+    const FORMAT: &str = "{{.Name}}\t{{.Config.Image}}\t{{.State.Status}}\t\
+        {{index .Config.Labels \"com.docker.compose.project\"}}\t\
+        {{index .Config.Labels \"com.docker.compose.project.working_dir\"}}\t\
+        {{index .Config.Labels \"com.docker.compose.service\"}}\t\
+        {{index .Config.Labels \"com.docker.compose.project.config_files\"}}";
+
+    let mut args = vec!["inspect".to_string(), "--format".to_string(), FORMAT.to_string()];
+    args.extend(ids.iter().cloned());
+    let output = match Command::new("docker").args(&args).output().await {
+        Ok(o) => o,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to run docker: {}", e)).into_response(),
+    };
+
+    let projects = repo::list_projects(&state.pool).await.unwrap_or_default();
+    let managed_dirs: std::collections::HashSet<String> =
+        projects.iter().map(|p| trim_path(&p.local_path)).collect();
+    let managed_names: std::collections::HashSet<String> =
+        projects.iter().map(|p| dir_name(&p.local_path)).collect();
+
+    // Insertion order is docker's, which is newest first; groups keep it so
+    // the list doesn't reshuffle between polls.
+    let mut groups: Vec<UnmanagedGroup> = Vec::new();
+    let mut index: HashMap<String, usize> = HashMap::new();
+    let mut running = 0usize;
+
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        let f: Vec<&str> = line.split('\t').collect();
+        if f.len() < 7 {
+            continue;
+        }
+        running += 1;
+        let name = f[0].trim_start_matches('/').to_string();
+        let container = ScannedContainer {
+            name: name.clone(),
+            image: f[1].to_string(),
+            status: f[2].to_string(),
+            service: label(f[5]),
+        };
+        let compose_project = label(f[3]);
+        let working_dir = label(f[4]).map(|d| trim_path(&d));
+
+        let managed = working_dir.as_ref().is_some_and(|d| managed_dirs.contains(d))
+            || compose_project.as_ref().is_some_and(|p| managed_names.contains(&p.to_lowercase()));
+        if managed {
+            continue;
+        }
+
+        // A container started outside compose has no stack to join, so it
+        // stands on its own rather than being lumped in with the others.
+        let key = match (&compose_project, &working_dir) {
+            (Some(p), Some(d)) => format!("compose:{}:{}", p, d),
+            (Some(p), None) => format!("compose:{}", p),
+            _ => format!("container:{}", name),
+        };
+
+        match index.get(&key) {
+            Some(&i) => groups[i].containers.push(container),
+            None => {
+                // config_files is absolute and may list several, comma-joined.
+                // Only the first is offered, named relative to the directory
+                // it belongs to, which is the form the Add Project form wants.
+                let compose_file = label(f[6]).map(|c| {
+                    let first = c.split(',').next().unwrap_or(&c).trim().to_string();
+                    match working_dir.as_ref().and_then(|d| first.strip_prefix(&format!("{}/", d))) {
+                        Some(rel) => rel.to_string(),
+                        None => first,
+                    }
+                });
+                index.insert(key, groups.len());
+                groups.push(UnmanagedGroup {
+                    suggested_name: compose_project.clone().unwrap_or_else(|| name.clone()),
+                    repo_url: match &working_dir {
+                        Some(d) => git_remote(d).await,
+                        None => None,
+                    },
+                    compose_project,
+                    working_dir,
+                    compose_file,
+                    containers: vec![container],
+                });
+            }
+        }
+    }
+
+    Json(serde_json::json!({ "groups": groups, "running": running })).into_response()
+}
+
+/// origin of the checkout at a host path, as an https URL, if it is a repo.
+async fn git_remote(host_dir: &str) -> Option<String> {
+    let dir = host_to_container(host_dir);
+    if !std::path::Path::new(&dir).join(".git").exists() {
+        return None;
+    }
+    let _ = Command::new("git")
+        .args(["config", "--global", "--add", "safe.directory", &dir])
+        .output()
+        .await;
+    let out = Command::new("git")
+        .args(["remote", "get-url", "origin"])
+        .current_dir(&dir)
+        .output()
+        .await
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let url = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if url.is_empty() { None } else { Some(ssh_to_https(&url)) }
+}
