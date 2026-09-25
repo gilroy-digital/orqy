@@ -10,7 +10,7 @@ import { Play, Trash2, GitBranch, Clock, ArrowLeft, Copy, ExternalLink, Pencil, 
 export default function ProjectDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { data: project, loading: loadingProject, refetch: refetchProject } = useApi(`/projects/${id}`, [], { pollInterval: 5000 });
+  const { data: project, loading: loadingProject, error, refetch: refetchProject } = useApi(`/projects/${id}`, [], { pollInterval: 5000 });
   const { data: deploys, loading: loadingDeploys, refetch: refetchDeploys } = useApi(`/projects/${id}/deploys`, [], { pollInterval: 5000 });
   const [selectedDeploy, setSelectedDeploy] = useState(null);
   const [deploying, setDeploying] = useState(false);
@@ -236,6 +236,7 @@ export default function ProjectDetail() {
 
       <EditProjectModal
         open={editing}
+        projectId={id}
         onClose={() => setEditing(false)}
         onSaved={refetchProject}
       />

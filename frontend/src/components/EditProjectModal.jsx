@@ -5,11 +5,12 @@ import EditProject from '../pages/EditProject';
 /**
  * The edit form over the project page rather than instead of it.
  *
- * The form itself is the existing Edit Project page, embedded: it reads the
- * same :id from the route, so opening this from a project page edits that
- * project, and there is only ever one copy of the form to keep up to date.
+ * The form itself is the existing Edit Project page, embedded, so there is
+ * only ever one copy of it to keep up to date. It edits whichever project is
+ * passed in, which is why this works from the dashboard as well as from a
+ * project's own page.
  */
-export default function EditProjectModal({ open, onClose, onSaved }) {
+export default function EditProjectModal({ open, projectId, onClose, onSaved }) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e) => e.key === 'Escape' && onClose();
@@ -53,6 +54,7 @@ export default function EditProjectModal({ open, onClose, onSaved }) {
         <div className="p-6">
           <EditProject
             embedded
+            projectId={projectId}
             onDone={() => {
               onSaved?.();
               onClose();
