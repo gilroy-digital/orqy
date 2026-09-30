@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { getAuthHeaders } from '../hooks/useApi';
 
 export default function PathPicker({ value, onChange, mode = 'directory', placeholder, startPath }) {
   const [open, setOpen] = useState(false);
@@ -11,7 +12,7 @@ export default function PathPicker({ value, onChange, mode = 'directory', placeh
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/browse?path=${encodeURIComponent(path)}`);
+      const res = await fetch(`/api/browse?path=${encodeURIComponent(path)}`, { headers: getAuthHeaders() });
       if (!res.ok) {
         const text = await res.text();
         throw new Error(text);
@@ -34,7 +35,7 @@ export default function PathPicker({ value, onChange, mode = 'directory', placeh
         if (dir) { browse(dir); return; }
       }
       if (startPath) { browse(startPath); return; }
-      fetch('/api/homedir').then(r => r.json()).then(data => browse(data.path)).catch(() => browse('/'));
+      fetch('/api/homedir', { headers: getAuthHeaders() }).then(r => r.json()).then(data => browse(data.path)).catch(() => browse('/'));
     }
   }, [open]);
 

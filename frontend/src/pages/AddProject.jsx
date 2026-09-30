@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useApi, apiPost } from '../hooks/useApi';
+import { useApi, apiPost, getAuthHeaders } from '../hooks/useApi';
 import PathPicker from '../components/PathPicker';
 
 const inputClass = 'w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm';
@@ -74,7 +74,7 @@ export default function AddProject() {
     try {
       const params = new URLSearchParams({ repo_url: form.repo_url });
       if (form.pat) params.set('pat', form.pat);
-      const res = await fetch(`/api/branches?${params}`);
+      const res = await fetch(`/api/branches?${params}`, { headers: getAuthHeaders() });
       const data = await res.json();
       if (!res.ok) {
         setRepoError(data.error || 'Failed to validate repository');
@@ -122,7 +122,7 @@ export default function AddProject() {
     setCloneError(null);
     setPathValidated(false);
     try {
-      const res = await fetch(`/api/check-repo?path=${encodeURIComponent(path)}`);
+      const res = await fetch(`/api/check-repo?path=${encodeURIComponent(path)}`, { headers: getAuthHeaders() });
       const data = await res.json();
       setRepoCheck(data);
       if (data.is_git_repo) {
@@ -155,7 +155,7 @@ export default function AddProject() {
     try {
       const res = await fetch('/api/clone', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           repo_url: form.repo_url,
           path: form.local_path,
@@ -183,7 +183,7 @@ export default function AddProject() {
     try {
       const params = new URLSearchParams({ path });
       if (composeFile) params.set('compose_file', composeFile);
-      const res = await fetch(`/api/containers?${params}`);
+      const res = await fetch(`/api/containers?${params}`, { headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         setContainers(data.containers || []);

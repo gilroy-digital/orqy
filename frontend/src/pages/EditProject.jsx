@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useApi, apiPut } from '../hooks/useApi';
+import { useApi, apiPut, getAuthHeaders } from '../hooks/useApi';
 import PathPicker from '../components/PathPicker';
 
 const inputClass = 'w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm';
@@ -67,7 +67,7 @@ export default function EditProject({ embedded = false, onDone, projectId }) {
     try {
       const params = new URLSearchParams({ repo_url: repoUrl });
       if (pat) params.set('pat', pat);
-      const res = await fetch(`/api/branches?${params}`);
+      const res = await fetch(`/api/branches?${params}`, { headers: getAuthHeaders() });
       const data = await res.json();
       if (!res.ok) {
         setBranchError(data.error || 'Failed to fetch branches');
@@ -89,7 +89,7 @@ export default function EditProject({ embedded = false, onDone, projectId }) {
     try {
       const params = new URLSearchParams({ path });
       if (composeFile) params.set('compose_file', composeFile);
-      const res = await fetch(`/api/containers?${params}`);
+      const res = await fetch(`/api/containers?${params}`, { headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         setContainers(data.containers || []);

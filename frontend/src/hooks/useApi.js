@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 
 const BASE = '/api';
 
-function getAuthHeaders() {
+// Raw fetch() calls must send this too: the orqy_token cookie is a session cookie,
+// gone after a browser restart while the token in localStorage keeps you signed in.
+export function getAuthHeaders() {
   const token = localStorage.getItem('orqy_token');
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
