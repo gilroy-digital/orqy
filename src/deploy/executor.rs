@@ -69,13 +69,7 @@ async fn run_deploy_inner(
         }
 
         // Log the command being run (redact PATs from URLs)
-        let redacted_args: Vec<String> = args.iter().map(|a| {
-            if a.contains('@') && a.starts_with("https://") {
-                a.split('@').last().map(|host| format!("https://***@{}", host)).unwrap_or_else(|| a.to_string())
-            } else {
-                a.to_string()
-            }
-        }).collect();
+        let redacted_args: Vec<String> = args.iter().map(|a| redact_credentials(a)).collect();
         let system_msg = format!("$ {} {}", cmd, redacted_args.join(" "));
         let log = repo::append_log(pool, deploy_id, *line_num, "system", &system_msg).await?;
         let _ = tx.send(log);
@@ -103,7 +97,7 @@ async fn run_deploy_inner(
             let reader = BufReader::new(stdout);
             let mut lines = reader.lines();
             while let Some(line) = lines.next_line().await? {
-                let log = repo::append_log(pool, deploy_id, *line_num, "stdout", &line).await?;
+                let log = repo::append_log(pool, deploy_id, *line_num, "stdout", &redact_credentials(&line)).await?;
                 let _ = tx.send(log);
                 *line_num += 1;
             }
@@ -114,7 +108,7 @@ async fn run_deploy_inner(
             let reader = BufReader::new(stderr);
             let mut lines = reader.lines();
             while let Some(line) = lines.next_line().await? {
-                let log = repo::append_log(pool, deploy_id, *line_num, "stderr", &line).await?;
+                let log = repo::append_log(pool, deploy_id, *line_num, "stderr", &redact_credentials(&line)).await?;
                 let _ = tx.send(log);
                 *line_num += 1;
             }
@@ -410,11 +404,105 @@ fn build_compose_args(compose_file: &str, service_name: &Option<String>, action:
     args
 }
 
+/// Hide credentials in any text that may contain an authenticated URL.
+///
+/// Git echoes the remote URL in its errors ("could not read Password for
+/// 'https://<pat>@github.com'"), and that output ends up in logs, the deploy
+/// log table and API responses. Every `scheme://user[:pass]@host` has its
+/// userinfo replaced with `***`, and bare GitHub tokens are masked as well.
+pub fn redact_credentials(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(i) = rest.find("://") {
+        let (head, tail) = rest.split_at(i + 3);
+        out.push_str(head);
+        // The authority runs until a path, whitespace or quote.
+        let end = tail
+            .find(|c: char| c == '/' || c.is_whitespace() || c == '\'' || c == '"' || c == '`')
+            .unwrap_or(tail.len());
+        let authority = &tail[..end];
+        match authority.rfind('@') {
+            Some(at) => {
+                out.push_str("***");
+                out.push_str(&authority[at..]);
+            }
+            None => out.push_str(authority),
+        }
+        rest = &tail[end..];
+    }
+    out.push_str(rest);
+    mask_github_tokens(&out)
+}
+
+fn mask_github_tokens(text: &str) -> String {
+    const PREFIXES: [&str; 6] = ["github_pat_", "ghp_", "gho_", "ghu_", "ghs_", "ghr_"];
+    let mut out = String::with_capacity(text.len());
+    let mut i = 0;
+    let bytes = text.as_bytes();
+    while i < text.len() {
+        let hit = PREFIXES.iter().find(|p| text[i..].starts_with(*p));
+        if let Some(prefix) = hit {
+            let start = i + prefix.len();
+            let mut j = start;
+            while j < bytes.len() && (bytes[j].is_ascii_alphanumeric() || bytes[j] == b'_') {
+                j += 1;
+            }
+            if j - start >= 20 {
+                out.push_str(prefix);
+                out.push_str("***");
+                i = j;
+                continue;
+            }
+        }
+        let ch = text[i..].chars().next().unwrap();
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    out
+}
+
 pub fn inject_pat_into_url(url: &str, pat: &str) -> String {
     // Convert https://github.com/user/repo.git -> https://<pat>@github.com/user/repo.git
     if url.starts_with("https://") {
         url.replacen("https://", &format!("https://{}@", pat), 1)
     } else {
         url.to_string()
+    }
+}
+
+#[cfg(test)]
+mod redact_tests {
+    use super::redact_credentials;
+
+    #[test]
+    fn hides_pat_in_git_error() {
+        let msg = "fatal: could not read Password for 'https://github_pat_11ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@github.com': No such device";
+        let out = redact_credentials(msg);
+        assert!(!out.contains("11ABCDEF"), "{out}");
+        assert!(out.contains("https://***@github.com"), "{out}");
+    }
+
+    #[test]
+    fn hides_user_and_password() {
+        let out = redact_credentials("fetch https://user:s3cret@host.example/repo.git failed");
+        assert_eq!(out, "fetch https://***@host.example/repo.git failed");
+    }
+
+    #[test]
+    fn leaves_plain_urls_and_text() {
+        let s = "From https://github.com/Fleebee/x\n * branch main -> FETCH_HEAD; mail me@example.com";
+        assert_eq!(redact_credentials(s), s);
+    }
+
+    #[test]
+    fn masks_bare_tokens() {
+        let out = redact_credentials("token ghp_abcdefghijklmnopqrstuvwxyz0123456789 used");
+        assert_eq!(out, "token ghp_*** used");
+    }
+
+    #[test]
+    fn handles_non_ascii() {
+        let s = "caf\u{e9} https://tok@github.com/a \u{2713}";
+        assert_eq!(redact_credentials(s), "caf\u{e9} https://***@github.com/a \u{2713}");
     }
 }

@@ -747,7 +747,7 @@ pub async fn clone_repo(
         let stderr = String::from_utf8_lossy(&output.stderr);
         return (StatusCode::UNPROCESSABLE_ENTITY, Json(serde_json::json!({
             "error": "Clone failed",
-            "detail": stderr.trim(),
+            "detail": executor::redact_credentials(stderr.trim()),
         }))).into_response();
     }
 
@@ -860,7 +860,7 @@ pub async fn list_branches(
         };
         return (StatusCode::UNPROCESSABLE_ENTITY, Json(serde_json::json!({
             "error": msg,
-            "detail": stderr.trim(),
+            "detail": executor::redact_credentials(stderr.trim()),
         }))).into_response();
     }
 

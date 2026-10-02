@@ -142,7 +142,10 @@ async fn check_for_changes(
         .await?;
 
     if !output.status.success() {
-        anyhow::bail!("git ls-remote failed: {}", String::from_utf8_lossy(&output.stderr));
+        anyhow::bail!(
+            "git ls-remote failed: {}",
+            executor::redact_credentials(&String::from_utf8_lossy(&output.stderr))
+        );
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
