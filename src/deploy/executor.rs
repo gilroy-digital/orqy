@@ -9,6 +9,18 @@ use crate::deploy::DeployBroadcaster;
 use crate::hostpath::host_to_container;
 use sqlx::PgPool;
 
+/// Let git (running as root here) operate on a checkout owned by another user.
+///
+/// Replaces any existing entries for the path instead of appending: this runs
+/// on every poll, and `--add` grew /root/.gitconfig by one line per call until
+/// parsing it dominated the cost of every git command.
+pub async fn mark_safe_directory(path: &str) {
+    let _ = Command::new("git")
+        .args(["config", "--global", "--fixed-value", "--replace-all", "safe.directory", path, path])
+        .output()
+        .await;
+}
+
 /// Execute a full deploy cycle for a project:
 /// 1. git pull (with PAT auth if needed)
 /// 2. docker compose down
@@ -151,10 +163,7 @@ async fn run_deploy_inner(
     let host_path = project.local_path.clone();
 
     // Mark directory as safe for git (container runs as root, host files owned by different user)
-    let _ = Command::new("git")
-        .args(["config", "--global", "--add", "safe.directory", &local_path])
-        .output()
-        .await;
+    mark_safe_directory(&local_path).await;
 
     // git fetch using authenticated URL directly
     let branch = &project.branch;

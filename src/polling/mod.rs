@@ -131,10 +131,7 @@ async fn check_for_changes(
     };
 
     let local_path = host_to_container(&project.local_path);
-    let _ = tokio::process::Command::new("git")
-        .args(["config", "--global", "--add", "safe.directory", &local_path])
-        .output()
-        .await;
+    executor::mark_safe_directory(&local_path).await;
     let output = tokio::process::Command::new("git")
         .args(["ls-remote", &remote_url, &project.branch])
         .current_dir(&local_path)

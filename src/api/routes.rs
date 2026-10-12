@@ -667,10 +667,7 @@ pub async fn check_repo(
     if !p.join(".git").exists() {
         return Json(RepoCheck { exists: true, is_git_repo: false, remote_url: None }).into_response();
     }
-    let _ = Command::new("git")
-        .args(["config", "--global", "--add", "safe.directory", &container_path])
-        .output()
-        .await;
+    executor::mark_safe_directory(&container_path).await;
     let remote = Command::new("git")
         .args(["remote", "get-url", "origin"])
         .current_dir(p)
@@ -1042,10 +1039,7 @@ async fn git_remote(host_dir: &str) -> Option<String> {
     if !std::path::Path::new(&dir).join(".git").exists() {
         return None;
     }
-    let _ = Command::new("git")
-        .args(["config", "--global", "--add", "safe.directory", &dir])
-        .output()
-        .await;
+    executor::mark_safe_directory(&dir).await;
     let out = Command::new("git")
         .args(["remote", "get-url", "origin"])
         .current_dir(&dir)
