@@ -43,11 +43,15 @@ pub async fn browse_filesystem(
 
     // Map host path to container path
     let container_path = host_to_container(&host_path);
-    let base = std::path::Path::new(&container_path);
 
-    let base = match base.canonicalize() {
-        Ok(p) => p,
-        Err(_) => return (StatusCode::NOT_FOUND, "Path does not exist").into_response(),
+    // A project's saved path may have been moved or deleted since; open the
+    // nearest folder that still exists so the picker isn't a dead end.
+    let base = match std::path::Path::new(&container_path)
+        .ancestors()
+        .find_map(|p| p.canonicalize().ok().filter(|c| c.is_dir()))
+    {
+        Some(p) => p,
+        None => return (StatusCode::NOT_FOUND, "Path does not exist").into_response(),
     };
 
     let current_host = container_to_host(&base.to_string_lossy());
